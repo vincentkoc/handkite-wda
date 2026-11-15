@@ -29,4 +29,23 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+typedef NS_ENUM(NSUInteger, FBReadTimingPhase) {
+  FBReadTimingPhaseActiveApp,
+  FBReadTimingPhaseQuiescence,
+  FBReadTimingPhaseSnapshot,
+  FBReadTimingPhaseSerialize,
+};
+
+/**
+ Payload-free, opt-in read diagnostics. Route paths are registration patterns,
+ never request URLs. A nil timing leaves the handler unchanged.
+ */
+@interface FBReadTiming : NSObject
++ (nullable instancetype)enqueueMethod:(NSString *)method
+                            routePath:(NSString *)routePath;
+- (void)enter;
+- (void)exit;
++ (void)phase:(FBReadTimingPhase)phase entering:(BOOL)entering;
+@end
+
 NS_ASSUME_NONNULL_END

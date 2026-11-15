@@ -219,10 +219,21 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 
 - (NSDictionary *)fb_tree:(nullable NSSet<NSString *> *)excludedAttributes
 {
-  id<FBXCElementSnapshot> snapshot = [self fb_standardSnapshot];
-  return [self.class dictionaryForElement:snapshot
+  id<FBXCElementSnapshot> snapshot;
+  [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:YES];
+  @try {
+    snapshot = [self fb_standardSnapshot];
+  } @finally {
+    [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:NO];
+  }
+  [FBReadTiming phase:FBReadTimingPhaseSerialize entering:YES];
+  @try {
+    return [self.class dictionaryForElement:snapshot
                                 recursive:YES
                        excludedAttributes:excludedAttributes];
+  } @finally {
+    [FBReadTiming phase:FBReadTimingPhaseSerialize entering:NO];
+  }
 }
 
 - (NSDictionary *)fb_accessibilityTree

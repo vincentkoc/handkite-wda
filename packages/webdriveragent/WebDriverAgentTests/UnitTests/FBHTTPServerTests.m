@@ -16,12 +16,39 @@
 #import "FBHTTPServer.h"
 #import "FBTCPSocket.h"
 #import "FBWebServer.h"
+#import "FBLogger.h"
+#import "XCTestPrivateSymbols.h"
+#import "XCDebugLogDelegate-Protocol.h"
 
 @interface FBWebServer (FBWDATestable)
 - (void)registerServerKeyRouteHandlers;
 @end
 
 static atomic_int gFramingProbeHits;
+
+@interface FBReadTimingTestSink : NSObject <XCDebugLogDelegate>
+@property (nonatomic, strong) NSMutableArray<NSString *> *messages;
+@property (nonatomic) BOOL throws;
+@end
+
+@implementation FBReadTimingTestSink
+- (void)logDebugMessage:(NSString *)message
+{
+  if (self.throws) {
+    @throw [NSException exceptionWithName:@"test" reason:@"not logged"
+                               userInfo:nil];
+  }
+  @synchronized (self.messages) {
+    [self.messages addObject:message];
+  }
+}
+@end
+
+static FBReadTimingTestSink *gReadTimingSink;
+static id<XCDebugLogDelegate> FBReadTimingTestLogger(void)
+{
+  return gReadTimingSink;
+}
 
 // The response in `data` once all of it has arrived - its header block and Content-Length body -
 // or nil while more is due.
@@ -55,6 +82,158 @@ static NSString *FBCompleteResponse(NSData *data)
 @end
 
 @implementation FBHTTPServerTests
+
+- (void)withReadTimingSink:(void (^)(FBReadTimingTestSink *sink))block
+{
+  const char *original = getenv("HANDKITE_WDA_READ_TIMINGS");
+  NSString *saved = original ? @(original) : nil;
+  id<XCDebugLogDelegate> (*savedLogger)(void) = XCDebugLogger;
+  gReadTimingSink = [FBReadTimingTestSink new];
+  gReadTimingSink.messages = [NSMutableArray array];
+  XCDebugLogger = FBReadTimingTestLogger;
+  setenv("HANDKITE_WDA_READ_TIMINGS", "1", 1);
+  @try {
+    block(gReadTimingSink);
+  } @finally {
+    XCDebugLogger = savedLogger;
+    gReadTimingSink = nil;
+    if (nil == saved) {
+      unsetenv("HANDKITE_WDA_READ_TIMINGS");
+    } else {
+      setenv("HANDKITE_WDA_READ_TIMINGS", saved.UTF8String, 1);
+    }
+  }
+}
+
+- (NSArray<NSDictionary *> *)readTimingEvents:(FBReadTimingTestSink *)sink
+{
+  NSMutableArray *events = [NSMutableArray array];
+  @synchronized (sink.messages) {
+    for (NSString *message in sink.messages) {
+      NSString *prefix = @"handkite_wda_read_timing ";
+      XCTAssertTrue([message hasPrefix:prefix]);
+      NSData *json = [[message substringFromIndex:prefix.length]
+        dataUsingEncoding:NSUTF8StringEncoding];
+      NSDictionary *event = [NSJSONSerialization JSONObjectWithData:json
+        options:0 error:nil];
+      NSSet *keys = [NSSet setWithArray:@[@"v", @"id", @"route", @"phase",
+                                        @"event", @"elapsed_us"]];
+      XCTAssertEqualObjects([NSSet setWithArray:event.allKeys], keys);
+      XCTAssertEqualObjects(event[@"v"], @1);
+      XCTAssertGreaterThan([event[@"id"] unsignedLongLongValue], 0u);
+      [events addObject:event];
+    }
+  }
+  return events;
+}
+
+- (void)testReadTimingsRequireExactOptInAndRegisteredReadRoute
+{
+  [self withReadTimingSink:^(FBReadTimingTestSink *sink) {
+    for (NSString *value in @[@"", @"0", @"true"]) {
+      setenv("HANDKITE_WDA_READ_TIMINGS", value.UTF8String, 1);
+      XCTAssertNil([FBReadTiming enqueueMethod:@"GET" routePath:@"/source"]);
+    }
+    unsetenv("HANDKITE_WDA_READ_TIMINGS");
+    XCTAssertNil([FBReadTiming enqueueMethod:@"GET" routePath:@"/source"]);
+    setenv("HANDKITE_WDA_READ_TIMINGS", "1", 1);
+    XCTAssertNil([FBReadTiming enqueueMethod:@"POST" routePath:@"/source"]);
+    XCTAssertNil([FBReadTiming enqueueMethod:@"GET" routePath:@"/private"]);
+    [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:YES];
+    XCTAssertEqual(sink.messages.count, 0u);
+  }];
+}
+
+- (void)testReadTimingCorrelationAndNestedContextRestoration
+{
+  [self withReadTimingSink:^(FBReadTimingTestSink *sink) {
+    FBReadTiming *source = [FBReadTiming enqueueMethod:@"GET"
+      routePath:@"/session/:sessionID/source"];
+    [source enter];
+    [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:YES];
+    // The entry is already delivered even if the snapshot never returns.
+    XCTAssertEqualObjects([self readTimingEvents:sink].lastObject[@"event"],
+                          @"entry");
+    FBReadTiming *nested = [FBReadTiming enqueueMethod:@"GET"
+      routePath:@"/session/:sessionID"];
+    [nested enter];
+    [FBReadTiming phase:FBReadTimingPhaseSerialize entering:YES];
+    [nested exit];
+    [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:NO];
+    [source exit];
+    [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:YES];
+    NSArray *events = [self readTimingEvents:sink];
+    XCTAssertEqual(events.count, 8u);
+    XCTAssertEqualObjects(events[0][@"elapsed_us"], @0);
+    XCTAssertNotEqualObjects(events[0][@"id"], events[3][@"id"]);
+    for (NSNumber *index in @[@1, @2, @6, @7]) {
+      XCTAssertEqualObjects(events[index.unsignedIntegerValue][@"id"],
+                            events[0][@"id"]);
+      XCTAssertEqualObjects(events[index.unsignedIntegerValue][@"route"],
+                            @"source");
+    }
+    XCTAssertEqualObjects(events[3][@"route"], @"session");
+    XCTAssertGreaterThanOrEqual([events[7][@"elapsed_us"] unsignedLongLongValue],
+                               [events[1][@"elapsed_us"] unsignedLongLongValue]);
+  }];
+}
+
+- (void)testReadTimingQueueWaitAndPayloadIsolation
+{
+  [self withReadTimingSink:^(FBReadTimingTestSink *sink) {
+    [self.server get:@"/source" withBlock:^(RouteRequest *request,
+                                          RouteResponse *response) {
+      [response respondWithString:@"private-response-canary"];
+    }];
+    dispatch_queue_t queue = dispatch_queue_create("timing.test", 0);
+    [self.server setRouteQueue:queue];
+    dispatch_suspend(queue);
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    __block NSString *response;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+      response = [self responseClosingFirstForRequest:
+        @"GET /source?private-request-canary HTTP/1.1\r\n\r\n"];
+      dispatch_semaphore_signal(done);
+    });
+    @try {
+      NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
+      while ([self readTimingEvents:sink].count == 0
+             && deadline.timeIntervalSinceNow > 0) {
+        [NSThread sleepForTimeInterval:0.01];
+      }
+      NSArray *queued = [self readTimingEvents:sink];
+      XCTAssertEqual(queued.count, 1u);
+      XCTAssertEqualObjects(queued.firstObject[@"event"], @"enqueue");
+    } @finally {
+      dispatch_resume(queue);
+    }
+    XCTAssertEqual(dispatch_semaphore_wait(done,
+      dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)), 0L);
+    XCTAssertTrue([response hasSuffix:@"private-response-canary"]);
+    NSArray *events = [self readTimingEvents:sink];
+    XCTAssertEqual(events.count, 3u);
+    XCTAssertEqualObjects(events[1][@"event"], @"entry");
+    XCTAssertEqualObjects(events[2][@"event"], @"exit");
+    XCTAssertGreaterThan([events[1][@"elapsed_us"] unsignedLongLongValue], 0u);
+    for (NSString *message in sink.messages) {
+      XCTAssertFalse([message containsString:@"private-"]);
+    }
+  }];
+}
+
+- (void)testReadTimingSinkFailureDoesNotChangeResponse
+{
+  [self withReadTimingSink:^(FBReadTimingTestSink *sink) {
+    sink.throws = YES;
+    [self.server get:@"/wda/locked" withBlock:^(RouteRequest *request,
+                                              RouteResponse *response) {
+      [response respondWithString:@"unchanged"];
+    }];
+    NSString *response = [self responseClosingFirstForRequest:
+      @"GET /wda/locked HTTP/1.1\r\n\r\n"];
+    XCTAssertTrue([response hasSuffix:@"unchanged"]);
+  }];
+}
 
 - (void)setUp
 {

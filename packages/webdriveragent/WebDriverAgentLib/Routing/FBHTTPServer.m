@@ -63,6 +63,7 @@ static BOOL FBParseContentLength(NSString *value, NSUInteger *outLength)
 
 @interface FBHTTPRoute : NSObject
 @property (nonatomic, copy) NSString *verb;
+@property (nonatomic, copy) NSString *pathPattern;
 @property (nonatomic, strong) NSRegularExpression *regex;
 @property (nonatomic, copy, nullable) NSArray<NSString *> *keys;
 @property (nonatomic, copy) void (^block)(RouteRequest *request, RouteResponse *response);
@@ -248,6 +249,7 @@ static const int64_t FBStaleConnectionSweepIntervalSec = 10;
 {
   FBHTTPRoute *route = [self compiledRouteWithPath:path];
   route.verb = method.uppercaseString;
+  route.pathPattern = path;
   route.block = block;
   route.isStandalone = standalone;
   [self.routes addObject:route];
@@ -702,8 +704,15 @@ static const int64_t FBStaleConnectionSweepIntervalSec = 10;
       }
     }
 
+    FBReadTiming *timing = [FBReadTiming enqueueMethod:route.verb
+                                           routePath:route.pathPattern];
     void (^invoke)(void) = ^{
-      route.block(request, response);
+      [timing enter];
+      @try {
+        route.block(request, response);
+      } @finally {
+        [timing exit];
+      }
       // Whoever untracks `pendingRequest` first "wins" and gets to respond - either this normal
       // completion, or -abandonPendingRequestsForSessionID: on another thread.
       BOOL shouldRespond = (nil == pendingRequest) || [self untrackPendingRequest:pendingRequest forSessionID:sessionID];
@@ -821,9 +830,16 @@ static const int64_t FBStaleConnectionSweepIntervalSec = 10;
   }
 
   dispatch_queue_t queue = dispatch_queue_create(key.UTF8String, DISPATCH_QUEUE_SERIAL);
+  FBReadTiming *timing = [FBReadTiming enqueueMethod:route.verb
+                                         routePath:route.pathPattern];
   __weak typeof(self) weakSelf = self;
   dispatch_async(queue, ^{
-    route.block(request, response);
+    [timing enter];
+    @try {
+      route.block(request, response);
+    } @finally {
+      [timing exit];
+    }
     __strong typeof(weakSelf) strongSelf = weakSelf;
     if (nil == strongSelf) {
       return;

@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## Unreleased
+
+### Diagnostics
+
+* Add opt-in, payload-free read timing events through the XCTest debug-log
+  transport. Set `HANDKITE_WDA_READ_TIMINGS=1` in the runner environment to
+  measure handler queue wait and source active-app, quiescence, snapshot and
+  serialization phases. Logging is off by default and does not change waits.
+  Events contain only a process-local numeric correlation ID, fixed route,
+  phase and event enums, and monotonic microseconds since enqueue. Phase entry
+  is emitted before work so a stalled phase remains identifiable; an exit is
+  not a success assertion. Source subphases cover XML and JSON tree generation.
+
 ## [17.0.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.5...appium-webdriveragent@17.0.6) (2026-11-14)
 
 ### Miscellaneous Chores

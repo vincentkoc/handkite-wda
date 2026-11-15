@@ -14,6 +14,7 @@
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIElement+FBUtilities.h"
 #import "FBXPath.h"
+#import "FBLogger.h"
 
 @implementation FBDebugCommands
 
@@ -40,7 +41,13 @@ static NSString *const SOURCE_FORMAT_DESCRIPTION = @"description";
 + (id<FBResponsePayload>)handleGetSourceCommand:(FBRouteRequest *)request
 {
   // This method might be called without session
-  XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
+  XCUIApplication *application;
+  [FBReadTiming phase:FBReadTimingPhaseActiveApp entering:YES];
+  @try {
+    application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
+  } @finally {
+    [FBReadTiming phase:FBReadTimingPhaseActiveApp entering:NO];
+  }
   NSString *sourceType = request.parameters[@"format"] ?: SOURCE_FORMAT_XML;
   NSString *sourceScope = request.parameters[@"scope"];
   id result;

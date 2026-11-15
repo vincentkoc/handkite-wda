@@ -204,15 +204,32 @@ static NSString *const topNodeIndexPath = @"top";
       }
 
       if (rc >= 0) {
-        [self waitUntilStableWithElement:root];
+        [FBReadTiming phase:FBReadTimingPhaseQuiescence entering:YES];
+        @try {
+          [self waitUntilStableWithElement:root];
+        } @finally {
+          [FBReadTiming phase:FBReadTimingPhaseQuiescence entering:NO];
+        }
         // If 'includeHittableInPageSource' setting is enabled, then use native snapshots
         // to calculate a more accurate value for the 'hittable' attribute.
-        rc = [self xmlRepresentationWithRootElement:[self snapshotWithRoot:root
-                                                          useNative:FBConfiguration.sharedInstance.includeHittableInPageSource]
+        id<FBXCElementSnapshot> snapshot;
+        [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:YES];
+        @try {
+          snapshot = [self snapshotWithRoot:root
+            useNative:FBConfiguration.sharedInstance.includeHittableInPageSource];
+        } @finally {
+          [FBReadTiming phase:FBReadTimingPhaseSnapshot entering:NO];
+        }
+        [FBReadTiming phase:FBReadTimingPhaseSerialize entering:YES];
+        @try {
+          rc = [self xmlRepresentationWithRootElement:snapshot
                                              writer:writer
                                        elementStore:nil
                                               query:nil
                                 excludingAttributes:options.excludedAttributes];
+        } @finally {
+          [FBReadTiming phase:FBReadTimingPhaseSerialize entering:NO];
+        }
       }
 
       if (rc >= 0 && hasScope) {
