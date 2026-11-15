@@ -46,6 +46,16 @@ typedef NS_ENUM(NSUInteger, FBUIInterfaceAppearance) {
 - (BOOL)fb_isScreenLocked;
 
 /**
+ Returns the last observed screen lock state.
+
+ @return @YES if the screen is locked, @NO if it is unlocked, or nil if the
+ lock state could not be read (for example when the lock state notification
+ could not be registered). Unlike fb_isScreenLocked, an unknown state is not
+ reported as unlocked.
+ */
+- (nullable NSNumber *)fb_observedScreenLockState;
+
+/**
  Forces the device under test to switch to the lock screen. An immediate return will happen if the device is already locked and an error is going to be thrown if the screen has not been locked after the timeout.
  
  @param error If there is an error, upon return contains an NSError object that describes the problem.

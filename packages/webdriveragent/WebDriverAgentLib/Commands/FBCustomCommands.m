@@ -241,8 +241,12 @@
 
 + (id<FBResponsePayload>)handleIsLocked:(FBRouteRequest *)request
 {
-  BOOL isLocked = [XCUIDevice sharedDevice].fb_isScreenLocked;
-  return FBResponseWithObject(isLocked ? @YES : @NO);
+  NSNumber *isLocked = [[XCUIDevice sharedDevice] fb_observedScreenLockState];
+  if (nil == isLocked) {
+    return FBResponseWithStatus([FBCommandStatus unknownErrorWithMessage:@"lock_state_unavailable"
+                                                             traceback:nil]);
+  }
+  return FBResponseWithObject(isLocked);
 }
 
 + (id<FBResponsePayload>)handleUnlock:(FBRouteRequest *)request

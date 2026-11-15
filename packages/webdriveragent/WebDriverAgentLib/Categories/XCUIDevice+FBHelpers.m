@@ -12,6 +12,7 @@
 #import <ifaddrs.h>
 #include <notify.h>
 #import <objc/runtime.h>
+#include <pthread.h>
 
 #import "FBHIDOperations.h"
 #import "FBErrorBuilder.h"
@@ -115,7 +116,39 @@ NSDictionary<NSString *, NSNumber *> *fb_availableHandGestureNames(void) {
 
 @implementation XCUIDevice (FBHelpers)
 
-static bool fb_isLocked;
+// The lock state is written from the notify dispatch queue and read from
+// the request handling thread, so every access goes through this mutex.
+// `fb_lockStateValid` stays false until notify_get_state has succeeded at
+// least once, which lets callers tell "unlocked" apart from "unknown".
+static pthread_mutex_t fb_lockStateMutex = PTHREAD_MUTEX_INITIALIZER;
+static bool fb_lockStateValid;
+static bool fb_lockStateValue;
+
+static void fb_invalidateLockState(void)
+{
+  pthread_mutex_lock(&fb_lockStateMutex);
+  fb_lockStateValid = false;
+  fb_lockStateValue = false;
+  pthread_mutex_unlock(&fb_lockStateMutex);
+}
+
+static void fb_refreshLockState(int token)
+{
+  pthread_mutex_lock(&fb_lockStateMutex);
+  uint64_t state = UINT64_MAX;
+  fb_lockStateValid = notify_get_state(token, &state) == NOTIFY_STATUS_OK;
+  fb_lockStateValue = fb_lockStateValid && state != 0;
+  pthread_mutex_unlock(&fb_lockStateMutex);
+}
+
+static bool fb_copyLockState(bool *locked)
+{
+  pthread_mutex_lock(&fb_lockStateMutex);
+  bool valid = fb_lockStateValid;
+  *locked = fb_lockStateValue;
+  pthread_mutex_unlock(&fb_lockStateMutex);
+  return valid;
+}
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wobjc-load-method"
@@ -132,12 +165,17 @@ static bool fb_isLocked;
   int notify_token;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wstrict-prototypes"
-  notify_register_dispatch("com.apple.springboard.lockstate", &notify_token, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^(int token) {
-    uint64_t state = UINT64_MAX;
-    notify_get_state(token, &state);
-    fb_isLocked = state != 0;
+  uint32_t status = notify_register_dispatch("com.apple.springboard.lockstate", &notify_token, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^(int token) {
+    fb_refreshLockState(token);
   });
 #pragma clang diagnostic pop
+  if (status == NOTIFY_STATUS_OK) {
+    // The handler only fires on the next lock state change, so read the
+    // current state right away instead of assuming the screen is unlocked.
+    fb_refreshLockState(notify_token);
+  } else {
+    fb_invalidateLockState();
+  }
 }
 
 - (BOOL)fb_goToHomescreenWithError:(NSError **)error
@@ -197,7 +235,7 @@ static bool fb_isLocked;
 
 - (BOOL)fb_lockScreen:(NSError **)error
 {
-  if (fb_isLocked) {
+  if ([self fb_isScreenLocked]) {
     return YES;
   }
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
@@ -230,18 +268,25 @@ static bool fb_isLocked;
             timeout:FBScreenLockTimeout]
            timeoutErrorMessage:@"Timed out while waiting until the screen gets locked"]
           spinUntilTrue:^BOOL{
-            return fb_isLocked;
+            return [self fb_isScreenLocked];
           } error:error];
 }
 
 - (BOOL)fb_isScreenLocked
 {
-  return fb_isLocked;
+  bool locked = false;
+  return fb_copyLockState(&locked) && locked;
+}
+
+- (nullable NSNumber *)fb_observedScreenLockState
+{
+  bool locked = false;
+  return fb_copyLockState(&locked) ? @(locked) : nil;
 }
 
 - (BOOL)fb_unlockScreen:(NSError **)error
 {
-  if (!fb_isLocked) {
+  if (![self fb_isScreenLocked]) {
     return YES;
   }
   for (NSUInteger attempt = 0; attempt < 2; attempt++) {
@@ -261,7 +306,7 @@ static bool fb_isLocked;
             timeout:FBScreenLockTimeout]
            timeoutErrorMessage:@"Timed out while waiting until the screen gets unlocked"]
           spinUntilTrue:^BOOL{
-            return !fb_isLocked;
+            return ![self fb_isScreenLocked];
           } error:error];
 }
 
