@@ -31,8 +31,11 @@ reordered, or sent upstream on its own.
      message `lock_state_unavailable` instead of reporting `false`.
 2. `build(wda): rename runner product to HandkiteRunner`
    - iOS runner target only: `PRODUCT_NAME = HandkiteRunner` and the
-     placeholder `PRODUCT_BUNDLE_IDENTIFIER = com.example.HandkiteRunner`.
-     Builders must override the bundle identifier with one they own.
+     placeholder `HANDKITE_RUNNER_BUNDLE_ID = com.example.HandkiteRunner`.
+     Only the runner target uses this setting for its product bundle identifier.
+     Builders must override `HANDKITE_RUNNER_BUNDLE_ID` with an identifier they own.
+     Do not override `PRODUCT_BUNDLE_IDENTIFIER` globally: that also renames the
+     dependent WebDriverAgentLib framework.
    - The shared scheme `WebDriverAgentRunner` is renamed to `HandkiteRunner`.
    - Products: `HandkiteRunner.xctest` inside `HandkiteRunner-Runner.app`,
      whose bundle identifier is `<PRODUCT_BUNDLE_IDENTIFIER>.xctrunner`.
@@ -40,6 +43,8 @@ reordered, or sent upstream on its own.
      unchanged. The upstream Node tooling in `lib/` and `Scripts/` still
      expects `WebDriverAgentRunner` names for iOS and is not used by Handkite.
 3. `docs: describe the Handkite fork` (this file).
+4. `fix(wda): scope custom bundle identifiers to the runner` adds the
+   dedicated override above; the library bundle identifier stays unchanged.
 
 ## Syncing with upstream
 
@@ -72,5 +77,5 @@ xcodebuild build-for-testing \
   -scheme HandkiteRunner \
   -destination generic/platform=iOS \
   DEVELOPMENT_TEAM=<team> CODE_SIGN_STYLE=Automatic \
-  PRODUCT_BUNDLE_IDENTIFIER=<your.bundle.id>
+  HANDKITE_RUNNER_BUNDLE_ID=<your.bundle.id>
 ```

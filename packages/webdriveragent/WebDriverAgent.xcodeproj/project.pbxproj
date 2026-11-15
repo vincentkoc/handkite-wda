@@ -6279,7 +6279,8 @@
 					"$(inherited)",
 					"-all_load",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.HandkiteRunner;
+				HANDKITE_RUNNER_BUNDLE_ID = com.example.HandkiteRunner;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(HANDKITE_RUNNER_BUNDLE_ID)";
 				PRODUCT_NAME = HandkiteRunner;
 				USES_XCTRUNNER = YES;
 				WARNING_CFLAGS = (
@@ -6345,7 +6346,8 @@
 					"$(inherited)",
 					"-all_load",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.HandkiteRunner;
+				HANDKITE_RUNNER_BUNDLE_ID = com.example.HandkiteRunner;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(HANDKITE_RUNNER_BUNDLE_ID)";
 				PRODUCT_NAME = HandkiteRunner;
 				USES_XCTRUNNER = YES;
 				WARNING_CFLAGS = (
