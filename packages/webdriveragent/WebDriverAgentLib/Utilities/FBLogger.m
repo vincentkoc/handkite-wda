@@ -64,6 +64,7 @@ static uint64_t FBReadTimingNow(void)
 }
 
 @interface FBReadTiming ()
++ (nullable id<XCDebugLogDelegate>)readTimingLogger;
 @property (nonatomic, copy) NSString *route;
 @property (nonatomic) uint64_t identifier;
 @property (nonatomic) uint64_t enqueuedAt;
@@ -71,6 +72,11 @@ static uint64_t FBReadTimingNow(void)
 @end
 
 @implementation FBReadTiming
+
++ (id<XCDebugLogDelegate>)readTimingLogger
+{
+  return NULL == XCDebugLogger ? nil : XCDebugLogger();
+}
 
 + (instancetype)enqueueMethod:(NSString *)method routePath:(NSString *)path
 {
@@ -110,8 +116,9 @@ static uint64_t FBReadTimingNow(void)
   // Send only fixed enums and numbers through XCTest's existing transport.
   // Diagnostic transport failure must not change request/error behavior.
   @try {
-    if (NULL != XCDebugLogger) {
-      [XCDebugLogger() logDebugMessage:[NSString stringWithFormat:
+    id<XCDebugLogDelegate> logger = [self.class readTimingLogger];
+    if (nil != logger) {
+      [logger logDebugMessage:[NSString stringWithFormat:
         @"handkite_wda_read_timing {\"v\":1,\"id\":%llu,\"route\":\"%@\","
          "\"phase\":\"%@\",\"event\":\"%@\",\"elapsed_us\":%llu}",
         (unsigned long long)self.identifier, self.route, phase, event,

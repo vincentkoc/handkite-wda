@@ -9,6 +9,7 @@
 #import <XCTest/XCTest.h>
 
 #import <arpa/inet.h>
+#import <objc/runtime.h>
 #import <stdatomic.h>
 #import <sys/socket.h>
 #import <unistd.h>
@@ -17,8 +18,11 @@
 #import "FBTCPSocket.h"
 #import "FBWebServer.h"
 #import "FBLogger.h"
-#import "XCTestPrivateSymbols.h"
 #import "XCDebugLogDelegate-Protocol.h"
+
+@interface FBReadTiming (FBReadTimingTestable)
++ (nullable id<XCDebugLogDelegate>)readTimingLogger;
+@end
 
 @interface FBWebServer (FBWDATestable)
 - (void)registerServerKeyRouteHandlers;
@@ -45,7 +49,7 @@ static atomic_int gFramingProbeHits;
 @end
 
 static FBReadTimingTestSink *gReadTimingSink;
-static id<XCDebugLogDelegate> FBReadTimingTestLogger(void)
+static id<XCDebugLogDelegate> FBReadTimingTestLogger(id self, SEL _cmd)
 {
   return gReadTimingSink;
 }
@@ -87,15 +91,23 @@ static NSString *FBCompleteResponse(NSData *data)
 {
   const char *original = getenv("HANDKITE_WDA_READ_TIMINGS");
   NSString *saved = original ? @(original) : nil;
-  id<XCDebugLogDelegate> (*savedLogger)(void) = XCDebugLogger;
+  Method accessor = class_getClassMethod(FBReadTiming.class,
+                                        @selector(readTimingLogger));
+  XCTAssertNotEqual(accessor, NULL);
+  if (NULL == accessor) {
+    return;
+  }
   gReadTimingSink = [FBReadTimingTestSink new];
   gReadTimingSink.messages = [NSMutableArray array];
-  XCDebugLogger = FBReadTimingTestLogger;
+  // XCTest's exported function-pointer storage may be dyld-protected.
+  // Replace only our private accessor, never XCTest's data or delegate.
+  IMP savedLogger = method_setImplementation(accessor,
+                                             (IMP)FBReadTimingTestLogger);
   setenv("HANDKITE_WDA_READ_TIMINGS", "1", 1);
   @try {
     block(gReadTimingSink);
   } @finally {
-    XCDebugLogger = savedLogger;
+    method_setImplementation(accessor, savedLogger);
     gReadTimingSink = nil;
     if (nil == saved) {
       unsetenv("HANDKITE_WDA_READ_TIMINGS");
