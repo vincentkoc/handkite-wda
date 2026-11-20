@@ -65,6 +65,17 @@ An incomplete span means the operation did not return normally or did not
 produce its expected object. Timing does not change routing, serialization,
 timeouts, element admission or exception propagation.
 
+## Foreground state
+
+`GET /session/:sessionId/wda/foregroundState` returns `bundleId`, `pid`, and
+`locked` in one session-bound response. It uses the existing active-application
+and observed-lock reads. It does not fetch the application accessibility name
+or process arguments. An unavailable process identity or lock state returns an
+error. This read does not replace host ownership or native-lock admission.
+
+Clients may use the existing `activeAppInfo` and `locked` routes when an older
+runner returns `404 unknown command`. Other failures must remain failures.
+
 ## Syncing with upstream
 
 ```sh

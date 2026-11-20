@@ -59,6 +59,8 @@
     [[FBRoute GET:@"/wda/screens"].withoutSession.standalone respondWithTarget:self action:@selector(handleGetScreens:)],
     [[FBRoute GET:@"/wda/activeAppInfo"] respondWithTarget:self action:@selector(handleActiveAppInfo:)],
     [[FBRoute GET:@"/wda/activeAppInfo"].withoutSession respondWithTarget:self action:@selector(handleActiveAppInfo:)],
+    [[FBRoute GET:@"/wda/foregroundState"]
+      respondWithTarget:self action:@selector(handleForegroundState:)],
 #if !TARGET_OS_TV && !TARGET_OS_WATCH // tvOS/watchOS do not provide relevant APIs
     [[FBRoute POST:@"/wda/setPasteboard"] respondWithTarget:self action:@selector(handleSetPasteboard:)],
     [[FBRoute POST:@"/wda/setPasteboard"].withoutSession respondWithTarget:self action:@selector(handleSetPasteboard:)],
@@ -270,6 +272,36 @@
     @"name": name,
     @"processArguments": [self processArguments:app],
   });
+}
+
++ (id<FBResponsePayload>)foregroundStateForApplication:(XCUIApplication *)app
+                                              locked:(NSNumber *)locked
+{
+  if (![locked isKindOfClass:NSNumber.class]
+      || CFGetTypeID((__bridge CFTypeRef)locked) != CFBooleanGetTypeID()) {
+    return FBResponseWithStatus([FBCommandStatus
+      unknownErrorWithMessage:@"lock_state_unavailable" traceback:nil]);
+  }
+  NSString *bundleID = app.bundleID;
+  pid_t pid = app.processID;
+  if (bundleID.length == 0 || pid <= 0) {
+    return FBResponseWithStatus([FBCommandStatus
+      unknownErrorWithMessage:@"foreground_state_unavailable" traceback:nil]);
+  }
+  return FBResponseWithObject(@{
+    @"bundleId": bundleID,
+    @"pid": @(pid),
+    @"locked": locked,
+  });
+}
+
++ (id<FBResponsePayload>)handleForegroundState:(FBRouteRequest *)request
+{
+  XCUIApplication *app = request.session.activeApplication
+    ?: XCUIApplication.fb_activeApplication;
+  return [self foregroundStateForApplication:app
+                                     locked:XCUIDevice.sharedDevice
+                                       .fb_observedScreenLockState];
 }
 
 /**

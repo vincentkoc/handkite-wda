@@ -20,10 +20,26 @@
 #if !TARGET_OS_TV && __clang_major__ >= 15
 
 @interface FBCustomCommands (FBWDATestable)
++ (id<FBResponsePayload>)foregroundStateForApplication:(id)application
+                                              locked:(NSNumber *)locked;
 + (id<FBResponsePayload>)handleGetDeviceInfo:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleKeyboardInput:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleGetSimulatedHingeAngle:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleSetSimulatedHingeAngle:(FBRouteRequest *)request;
+@end
+
+@interface FBForegroundApplicationDouble : NSObject
+@property (nonatomic, copy) NSString *bundleID;
+@property (nonatomic) int processID;
+@end
+
+@implementation FBForegroundApplicationDouble
+- (NSString *)identifier
+{
+  [NSException raise:NSInternalInconsistencyException
+              format:@"Foreground state must not resolve the app identifier"];
+  return nil;
+}
 @end
 
 @interface FBCustomCommandsTests : XCTestCase
@@ -31,6 +47,57 @@
 @end
 
 @implementation FBCustomCommandsTests
+
+- (NSDictionary *)foregroundResponseForApp:(id)app locked:(NSNumber *)locked
+{
+  RouteResponse *response = [RouteResponse new];
+  [[FBCustomCommands foregroundStateForApplication:app locked:locked]
+    dispatchWithResponse:response];
+  return [NSJSONSerialization JSONObjectWithData:response.responseData
+                                        options:0 error:nil];
+}
+
+- (void)testForegroundStateUsesOnlyProcessIdentityAndNativeLock
+{
+  FBForegroundApplicationDouble *app = [FBForegroundApplicationDouble new];
+  app.bundleID = @"example.app";
+  app.processID = 42;
+  for (NSNumber *locked in @[@NO, @YES]) {
+    NSDictionary *body = [self foregroundResponseForApp:app locked:locked];
+    XCTAssertEqualObjects(body[@"value"], (@{
+      @"bundleId": @"example.app", @"pid": @42, @"locked": locked,
+    }));
+  }
+}
+
+- (void)testForegroundStateRefusesUnknownLock
+{
+  FBForegroundApplicationDouble *app = [FBForegroundApplicationDouble new];
+  app.bundleID = @"example.app";
+  app.processID = 42;
+  XCTAssertEqualObjects(
+    [self foregroundResponseForApp:app locked:nil][@"value"][@"error"],
+    @"unknown error");
+  for (id invalid in @[@0, @1, @"false", NSNull.null]) {
+    XCTAssertEqualObjects(
+      [self foregroundResponseForApp:app locked:invalid][@"value"][@"error"],
+      @"unknown error");
+  }
+}
+
+- (void)testForegroundStateRefusesMissingProcessIdentity
+{
+  FBForegroundApplicationDouble *app = [FBForegroundApplicationDouble new];
+  app.bundleID = @"example.app";
+  XCTAssertEqualObjects(
+    [self foregroundResponseForApp:app locked:@NO][@"value"][@"error"],
+    @"unknown error");
+  app.processID = 42;
+  app.bundleID = @"";
+  XCTAssertEqualObjects(
+    [self foregroundResponseForApp:app locked:@NO][@"value"][@"error"],
+    @"unknown error");
+}
 
 - (void)setUp
 {
