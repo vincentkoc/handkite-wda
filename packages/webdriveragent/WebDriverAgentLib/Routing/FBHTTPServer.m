@@ -702,8 +702,18 @@ static const int64_t FBStaleConnectionSweepIntervalSec = 10;
       }
     }
 
+    NSTimeInterval queuedAt = [FBLogger performanceStart];
     void (^invoke)(void) = ^{
-      route.block(request, response);
+      [FBLogger logPerformanceStage:@"route_queue" startedAt:queuedAt completed:YES];
+      NSTimeInterval startedAt = [FBLogger performanceStart];
+      BOOL completed = NO;
+      @try {
+        route.block(request, response);
+        completed = YES;
+      } @finally {
+        [FBLogger logPerformanceStage:@"route_handler" startedAt:startedAt
+                           completed:completed];
+      }
       // Whoever untracks `pendingRequest` first "wins" and gets to respond - either this normal
       // completion, or -abandonPendingRequestsForSessionID: on another thread.
       BOOL shouldRespond = (nil == pendingRequest) || [self untrackPendingRequest:pendingRequest forSessionID:sessionID];

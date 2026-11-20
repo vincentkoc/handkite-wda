@@ -904,6 +904,7 @@
 		AD76723E1D6B7CC000610457 /* XCUIElement+FBTyping.m in Sources */ = {isa = PBXBuildFile; fileRef = AD76723C1D6B7CC000610457 /* XCUIElement+FBTyping.m */; };
 		AD8D96F21D3C12990061268E /* WebDriverAgentLib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EE158A991CBD452B00A3E3F0 /* WebDriverAgentLib.framework */; };
 		ADBC39941D0782CD00327304 /* FBElementCacheTests.m in Sources */ = {isa = PBXBuildFile; fileRef = ADBC39931D0782CD00327304 /* FBElementCacheTests.m */; };
+		338AF7DF4CE01346E9C017EE /* FBPerformanceLoggerTests.m in Sources */ = {isa = PBXBuildFile; fileRef = ACC2B701BAFEC219FC090524 /* FBPerformanceLoggerTests.m */; };
 		ADBC39981D07842800327304 /* XCUIElementDouble.m in Sources */ = {isa = PBXBuildFile; fileRef = ADBC39971D07842800327304 /* XCUIElementDouble.m */; };
 		ADD8ADAEA11DD09BE99F72B1 /* XCTElementSnapshotAttributeDataSource-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 38E3FC945B8BF6F6AFD73EE7 /* XCTElementSnapshotAttributeDataSource-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		ADDA07241D6BB2BF001700AC /* FBScrollViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = ADDA07231D6BB2BF001700AC /* FBScrollViewController.m */; };
@@ -1786,6 +1787,7 @@
 		AD76723C1D6B7CC000610457 /* XCUIElement+FBTyping.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "XCUIElement+FBTyping.m"; sourceTree = "<group>"; };
 		AD76723F1D6B826F00610457 /* FBTypingTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBTypingTest.m; sourceTree = "<group>"; };
 		ADBC39931D0782CD00327304 /* FBElementCacheTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBElementCacheTests.m; sourceTree = "<group>"; };
+		ACC2B701BAFEC219FC090524 /* FBPerformanceLoggerTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBPerformanceLoggerTests.m; sourceTree = "<group>"; };
 		ADBC39961D07842800327304 /* XCUIElementDouble.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = XCUIElementDouble.h; sourceTree = "<group>"; };
 		ADBC39971D07842800327304 /* XCUIElementDouble.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = XCUIElementDouble.m; sourceTree = "<group>"; };
 		ADDA07221D6BB2BF001700AC /* FBScrollViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = FBScrollViewController.h; sourceTree = "<group>"; };
@@ -2755,6 +2757,7 @@
 				71A7EAFB1E229302001DA4F2 /* FBClassChainTests.m */,
 				EEE16E961D33A25500172525 /* FBConfigurationTests.m */,
 				ADBC39931D0782CD00327304 /* FBElementCacheTests.m */,
+				ACC2B701BAFEC219FC090524 /* FBPerformanceLoggerTests.m */,
 				EE3F8CFF1D08B05F006F02CE /* FBElementTypeTransformerTests.m */,
 				719FF5B81DAD21F5008E0099 /* FBElementUtilitiesTests.m */,
 				EE6A892C1D0B2AF40083E92B /* FBErrorBuilderTests.m */,
@@ -4935,6 +4938,7 @@
 				13FFF2F2287DBEE600E561E4 /* XCElementSnapshotDouble.m in Sources */,
 				EEE16E971D33A25500172525 /* FBConfigurationTests.m in Sources */,
 				ADBC39941D0782CD00327304 /* FBElementCacheTests.m in Sources */,
+				338AF7DF4CE01346E9C017EE /* FBPerformanceLoggerTests.m in Sources */,
 				715D554B2229891B00524509 /* FBExceptionHandlerTests.m in Sources */,
 				185A00000000000000000002 /* FBAlertSnapshotTests.m in Sources */,
 				718F49C8230844330045FE8B /* FBProtocolHelpersTests.m in Sources */,

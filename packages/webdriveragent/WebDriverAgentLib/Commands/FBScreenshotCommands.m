@@ -7,6 +7,7 @@
  */
 
 #import "FBScreenshotCommands.h"
+#import "FBLogger.h"
 
 #import "XCUIDevice+FBHelpers.h"
 
@@ -29,7 +30,14 @@
 + (id<FBResponsePayload>)handleGetScreenshot:(FBRouteRequest *)request
 {
   NSError *error;
-  NSData *screenshotData = [[XCUIDevice sharedDevice] fb_screenshotWithError:&error];
+  NSData *screenshotData = nil;
+  NSTimeInterval startedAt = [FBLogger performanceStart];
+  @try {
+    screenshotData = [[XCUIDevice sharedDevice] fb_screenshotWithError:&error];
+  } @finally {
+    [FBLogger logPerformanceStage:@"screenshot" startedAt:startedAt
+                       completed:nil != screenshotData];
+  }
   if (nil == screenshotData) {
     return FBResponseWithStatus([FBCommandStatus unableToCaptureScreenErrorWithMessage:error.description traceback:nil]);
   }

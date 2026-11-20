@@ -27,6 +27,15 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)verboseLog:(NSString *)message;
 + (void)verboseLogFmt:(NSString *)format, ... NS_FORMAT_FUNCTION(1,2);
 
+/**
+ Optional content-free measurements. A zero start value disables a span.
+ Set HANDKITE_WDA_TIMINGS=1 before starting the runner to enable them.
+ */
++ (NSTimeInterval)performanceStart;
++ (void)logPerformanceStage:(NSString *)stage
+                  startedAt:(NSTimeInterval)startedAt
+                  completed:(BOOL)completed;
+
 @end
 
 NS_ASSUME_NONNULL_END

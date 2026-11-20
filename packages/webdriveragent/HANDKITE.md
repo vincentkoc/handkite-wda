@@ -46,6 +46,25 @@ reordered, or sent upstream on its own.
 4. `fix(wda): scope custom bundle identifiers to the runner` adds the
    dedicated override above; the library bundle identifier stays unchanged.
 
+## Timing diagnostics
+
+Set `HANDKITE_WDA_TIMINGS=1` in the runner process environment to emit
+`handkite_wda_timing` JSON records. Logging is off by default. Records contain
+only a fixed stage name, monotonic start time, elapsed milliseconds and a
+completion flag; they do not contain element identifiers or screen content.
+
+The stages cover main-queue waiting, route handling, element-cache lookup,
+staleness resolution, element snapshots, tap dispatch, direct AX snapshots,
+quiescence, screenshots and source generation. Nested stages overlap and must
+not be added together. `element_snapshot` includes XCTest's opaque query and
+snapshot work; it does not separately measure the AX calls internal to XCTest.
+`route_queue` starts immediately before the HTTP server enqueues a matched
+route and ends when its route block starts on the configured queue.
+
+An incomplete span means the operation did not return normally or did not
+produce its expected object. Timing does not change routing, serialization,
+timeouts, element admission or exception propagation.
+
 ## Syncing with upstream
 
 ```sh

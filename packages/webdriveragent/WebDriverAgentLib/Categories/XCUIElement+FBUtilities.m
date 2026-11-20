@@ -90,17 +90,23 @@ static NSArray<XCUIElement *> *FBQueryElementsWithUids(XCUIElementQuery *scopeQu
 - (id<FBXCElementSnapshot>)fb_takeSnapshot:(BOOL)isCustom
 {
   __block id<FBXCElementSnapshot> snapshot = nil;
-  @autoreleasepool {
-    NSError *error = nil;
-    snapshot = isCustom
-      ? [self.fb_query fb_uniqueSnapshotWithError:&error]
-      : (id<FBXCElementSnapshot>)[self snapshotWithError:&error];
-    if (nil == snapshot) {
-      [self fb_raiseStaleElementExceptionWithError:error];
+  NSTimeInterval startedAt = [FBLogger performanceStart];
+  @try {
+    @autoreleasepool {
+      NSError *error = nil;
+      snapshot = isCustom
+        ? [self.fb_query fb_uniqueSnapshotWithError:&error]
+        : (id<FBXCElementSnapshot>)[self snapshotWithError:&error];
+      if (nil == snapshot) {
+        [self fb_raiseStaleElementExceptionWithError:error];
+      }
     }
+    self.lastSnapshot = snapshot;
+    return self.lastSnapshot;
+  } @finally {
+    [FBLogger logPerformanceStage:@"element_snapshot" startedAt:startedAt
+                       completed:nil != snapshot];
   }
-  self.lastSnapshot = snapshot;
-  return self.lastSnapshot;
 }
 
 - (id<FBXCElementSnapshot>)fb_standardSnapshot

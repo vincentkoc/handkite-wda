@@ -31,9 +31,17 @@ static void swizzledWaitForQuiescenceIncludingAnimationsIdle(id self, SEL _cmd, 
   NSTimeInterval desiredTimeout = FBConfiguration.sharedInstance.waitForIdleTimeout;
   [FBLogger logFmt:@"Waiting up to %@s until %@ is in idle state (%@ animations)",
    @(desiredTimeout), bundleId, includingAnimations ? @"including" : @"excluding"];
-  [FBXCAXClientProxy withApplicationStateTimeout:desiredTimeout do:^{
-    original_waitForQuiescenceIncludingAnimationsIdle(self, _cmd, includingAnimations);
-  }];
+  NSTimeInterval startedAt = [FBLogger performanceStart];
+  BOOL completed = NO;
+  @try {
+    [FBXCAXClientProxy withApplicationStateTimeout:desiredTimeout do:^{
+      original_waitForQuiescenceIncludingAnimationsIdle(self, _cmd, includingAnimations);
+    }];
+    completed = YES;
+  } @finally {
+    [FBLogger logPerformanceStage:@"quiescence" startedAt:startedAt
+                       completed:completed];
+  }
 }
 
 static void swizzledWaitForQuiescenceIncludingAnimationsIdlePreEvent(id self, SEL _cmd, BOOL includingAnimations, BOOL isPreEvent)
@@ -48,9 +56,17 @@ static void swizzledWaitForQuiescenceIncludingAnimationsIdlePreEvent(id self, SE
   NSTimeInterval desiredTimeout = FBConfiguration.sharedInstance.waitForIdleTimeout;
   [FBLogger logFmt:@"Waiting up to %@s until %@ is in idle state (%@ animations)",
    @(desiredTimeout), bundleId, includingAnimations ? @"including" : @"excluding"];
-  [FBXCAXClientProxy withApplicationStateTimeout:desiredTimeout do:^{
-    original_waitForQuiescenceIncludingAnimationsIdlePreEvent(self, _cmd, includingAnimations, isPreEvent);
-  }];
+  NSTimeInterval startedAt = [FBLogger performanceStart];
+  BOOL completed = NO;
+  @try {
+    [FBXCAXClientProxy withApplicationStateTimeout:desiredTimeout do:^{
+      original_waitForQuiescenceIncludingAnimationsIdlePreEvent(self, _cmd, includingAnimations, isPreEvent);
+    }];
+    completed = YES;
+  } @finally {
+    [FBLogger logPerformanceStage:@"quiescence" startedAt:startedAt
+                       completed:completed];
+  }
 }
 
 @implementation XCUIApplicationProcess (FBQuiescence)

@@ -9,6 +9,7 @@
 #import "FBElementCommands.h"
 
 #import "FBConfiguration.h"
+#import "FBLogger.h"
 #import "FBScreen.h"
 #import "XCUIScreen.h"
 #import "FBRoute.h"
@@ -243,7 +244,15 @@
   FBElementCache *elementCache = request.session.elementCache;
   XCUIElement *element = [elementCache elementForUUID:(NSString *)request.parameters[@"uuid"] checkStaleness:YES];
 #if TARGET_OS_IOS || TARGET_OS_WATCH
-  [element tap];
+  NSTimeInterval startedAt = [FBLogger performanceStart];
+  BOOL completed = NO;
+  @try {
+    [element tap];
+    completed = YES;
+  } @finally {
+    [FBLogger logPerformanceStage:@"element_tap" startedAt:startedAt
+                       completed:completed];
+  }
 #elif TARGET_OS_TV
   NSError *error = nil;
   if (![element fb_selectWithError:&error]) {

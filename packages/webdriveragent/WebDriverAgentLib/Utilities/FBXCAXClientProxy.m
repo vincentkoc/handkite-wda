@@ -158,12 +158,19 @@ static NSRecursiveLock *FBApplicationStateTimeoutLock(void)
     parameters[FBSnapshotMaxDepthKey] = @1;
   }
 
-  id result = [FBAXClient requestSnapshotForElement:element
-                                         attributes:attributes
-                                         parameters:[parameters copy]
-                                              error:error];
-  id<FBXCElementSnapshot> snapshot = [result valueForKey:@"_rootElementSnapshot"];
-  return nil == snapshot ? result : snapshot;
+  NSTimeInterval startedAt = [FBLogger performanceStart];
+  id result = nil;
+  @try {
+    result = [FBAXClient requestSnapshotForElement:element
+                                       attributes:attributes
+                                       parameters:[parameters copy]
+                                            error:error];
+    id<FBXCElementSnapshot> snapshot = [result valueForKey:@"_rootElementSnapshot"];
+    return nil == snapshot ? result : snapshot;
+  } @finally {
+    [FBLogger logPerformanceStage:@"ax_snapshot" startedAt:startedAt
+                       completed:nil != result];
+  }
 }
 
 - (NSArray<id<FBXCAccessibilityElement>> *)activeApplications

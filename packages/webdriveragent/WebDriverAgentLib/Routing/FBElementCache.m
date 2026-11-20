@@ -7,6 +7,7 @@
  */
 
 #import "FBElementCache.h"
+#import "FBLogger.h"
 
 #import "LRUCache.h"
 #import "FBAlert.h"
@@ -64,16 +65,22 @@ const int ELEMENT_CACHE_SIZE = 1024;
   }
 
   XCUIElement *element;
+  NSTimeInterval cacheStarted = [FBLogger performanceStart];
   @synchronized (self.elementCache) {
     element = [self.elementCache objectForKey:uuid];
   }
+  [FBLogger logPerformanceStage:@"element_cache" startedAt:cacheStarted
+                     completed:nil != element];
   if (nil == element) {
     NSString *reason = [NSString stringWithFormat:@"The element identified by \"%@\" is either not present or it has expired from the internal cache. Try to find it again", uuid];
     @throw [NSException exceptionWithName:FBStaleElementException reason:reason userInfo:@{}];
   }
   if (checkStaleness) {
+    NSTimeInterval snapshotStarted = [FBLogger performanceStart];
+    BOOL completed = NO;
     @try {
       [element fb_standardSnapshot];
+      completed = YES;
     } @catch (NSException *exception) {
       //  if the snapshot method threw FBStaleElementException (implying the element is stale) we need to explicitly remove it from the cache, PR: https://github.com/appium/WebDriverAgent/pull/985
       if ([exception.name isEqualToString:FBStaleElementException]) {
@@ -82,6 +89,9 @@ const int ELEMENT_CACHE_SIZE = 1024;
         }
       }
       @throw exception;
+    } @finally {
+      [FBLogger logPerformanceStage:@"element_staleness"
+                         startedAt:snapshotStarted completed:completed];
     }
   }
   return element;

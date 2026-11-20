@@ -10,6 +10,7 @@
 
 #import "FBRouteRequest.h"
 #import "FBSession.h"
+#import "FBLogger.h"
 #import "FBXMLGenerationOptions.h"
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIElement+FBUtilities.h"
@@ -39,36 +40,44 @@ static NSString *const SOURCE_FORMAT_DESCRIPTION = @"description";
 
 + (id<FBResponsePayload>)handleGetSourceCommand:(FBRouteRequest *)request
 {
-  // This method might be called without session
-  XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
-  NSString *sourceType = request.parameters[@"format"] ?: SOURCE_FORMAT_XML;
-  NSString *sourceScope = request.parameters[@"scope"];
-  id result;
-  if ([sourceType caseInsensitiveCompare:SOURCE_FORMAT_XML] == NSOrderedSame) {
-    NSArray<NSString *> *excludedAttributes = nil == request.parameters[@"excluded_attributes"]
-      ? nil
-      : [request.parameters[@"excluded_attributes"] componentsSeparatedByString:@","];
-    result = [application fb_xmlRepresentationWithOptions:
-        [[[FBXMLGenerationOptions new]
-          withExcludedAttributes:excludedAttributes]
-         withScope:sourceScope]];
-  } else if ([sourceType caseInsensitiveCompare:SOURCE_FORMAT_JSON] == NSOrderedSame) {
-    NSString *excludedAttributesString = request.parameters[@"excluded_attributes"];
-    NSSet<NSString *> *excludedAttributes = (excludedAttributesString == nil)
-          ? nil
-          : [NSSet setWithArray:[excludedAttributesString componentsSeparatedByString:@","]];
+  NSTimeInterval startedAt = [FBLogger performanceStart];
+  BOOL completed = NO;
+  @try {
+    // This method might be called without session
+    XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
+    NSString *sourceType = request.parameters[@"format"] ?: SOURCE_FORMAT_XML;
+    NSString *sourceScope = request.parameters[@"scope"];
+    id result;
+    if ([sourceType caseInsensitiveCompare:SOURCE_FORMAT_XML] == NSOrderedSame) {
+      NSArray<NSString *> *excludedAttributes = nil == request.parameters[@"excluded_attributes"]
+        ? nil
+        : [request.parameters[@"excluded_attributes"] componentsSeparatedByString:@","];
+      result = [application fb_xmlRepresentationWithOptions:
+          [[[FBXMLGenerationOptions new]
+            withExcludedAttributes:excludedAttributes]
+           withScope:sourceScope]];
+    } else if ([sourceType caseInsensitiveCompare:SOURCE_FORMAT_JSON] == NSOrderedSame) {
+      NSString *excludedAttributesString = request.parameters[@"excluded_attributes"];
+      NSSet<NSString *> *excludedAttributes = (excludedAttributesString == nil)
+            ? nil
+            : [NSSet setWithArray:[excludedAttributesString componentsSeparatedByString:@","]];
 
-    result = [application fb_tree:excludedAttributes];
-  } else if ([sourceType caseInsensitiveCompare:SOURCE_FORMAT_DESCRIPTION] == NSOrderedSame) {
-    result = application.fb_descriptionRepresentation;
-  } else {
-    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:[NSString stringWithFormat:@"Unknown source format '%@'. Only %@ source formats are supported.",
-                                                                                  sourceType, @[SOURCE_FORMAT_XML, SOURCE_FORMAT_JSON, SOURCE_FORMAT_DESCRIPTION]] traceback:nil]);
+      result = [application fb_tree:excludedAttributes];
+    } else if ([sourceType caseInsensitiveCompare:SOURCE_FORMAT_DESCRIPTION] == NSOrderedSame) {
+      result = application.fb_descriptionRepresentation;
+    } else {
+      return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:[NSString stringWithFormat:@"Unknown source format '%@'. Only %@ source formats are supported.",
+                                                                                    sourceType, @[SOURCE_FORMAT_XML, SOURCE_FORMAT_JSON, SOURCE_FORMAT_DESCRIPTION]] traceback:nil]);
+    }
+    if (nil == result) {
+      return FBResponseWithUnknownErrorFormat(@"Cannot get '%@' source of the current application", sourceType);
+    }
+    completed = YES;
+    return FBResponseWithObject(result);
+  } @finally {
+    [FBLogger logPerformanceStage:@"source" startedAt:startedAt
+                       completed:completed];
   }
-  if (nil == result) {
-    return FBResponseWithUnknownErrorFormat(@"Cannot get '%@' source of the current application", sourceType);
-  }
-  return FBResponseWithObject(result);
 }
 
 + (id<FBResponsePayload>)handleGetAccessibleSourceCommand:(FBRouteRequest *)request
