@@ -21,8 +21,15 @@
 #import "XCUIElement+FBWebDriverAttributes.h"
 #import "XCUIElementQuery.h"
 #import "FBElementUtils.h"
+#import "XCUIElement+FBCaching.h"
 #import "FBXCodeCompatibility.h"
 #import "FBXPath.h"
+
+@interface XCUIElement (FBFindInternal)
+- (NSArray<XCUIElement *> *)fb_descendantsMatchingPredicate:(NSPredicate *)predicate
+                             shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch
+                                        cacheForResponse:(BOOL)cacheForResponse;
+@end
 
 @implementation XCUIElement (FBFind)
 
@@ -80,6 +87,21 @@
 - (NSArray<XCUIElement *> *)fb_descendantsMatchingPredicate:(NSPredicate *)predicate
                                 shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch
 {
+  return [self fb_descendantsMatchingPredicate:predicate
+                   shouldReturnAfterFirstMatch:shouldReturnAfterFirstMatch
+                              cacheForResponse:NO];
+}
+
+- (NSArray<XCUIElement *> *)fb_descendantsMatchingPredicateForResponse:(NSPredicate *)predicate
+{
+  return [self fb_descendantsMatchingPredicate:predicate
+                   shouldReturnAfterFirstMatch:NO cacheForResponse:YES];
+}
+
+- (NSArray<XCUIElement *> *)fb_descendantsMatchingPredicate:(NSPredicate *)predicate
+                             shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch
+                                        cacheForResponse:(BOOL)cacheForResponse
+{
   NSPredicate *formattedPredicate = [NSPredicate fb_snapshotBlockPredicateWithPredicate:predicate];
   XCUIElementQuery *query = [[self.fb_query descendantsMatchingType:XCUIElementTypeAny] matchingPredicate:formattedPredicate];
   NSMutableArray<XCUIElement *> *result = [NSMutableArray array];
@@ -88,10 +110,20 @@
   id<FBXCElementSnapshot> cachedSnapshot = [self fb_cachedSnapshotWithQuery:query];
   // Include self element into predicate search
   if ([formattedPredicate evaluateWithObject:cachedSnapshot]) {
-    if (shouldReturnAfterFirstMatch || result.count == 0) {
+    if (shouldReturnAfterFirstMatch) {
       return @[self];
     }
     [result insertObject:self atIndex:0];
+  }
+  if (cacheForResponse && !shouldReturnAfterFirstMatch
+      && [self isKindOfClass:XCUIApplication.class]
+      && !FBConfiguration.sharedInstance.shouldUseCompactResponses
+      && !FBConfiguration.sharedInstance.boundElementsByIndex
+      && !FBCacheSnapshotsFromLookup(result, self, cachedSnapshot)) {
+    // Partial or ambiguous coverage takes the ordinary fresh-snapshot path.
+    for (XCUIElement *element in result) {
+      element.lastSnapshot = nil;
+    }
   }
   return result.copy;
 }

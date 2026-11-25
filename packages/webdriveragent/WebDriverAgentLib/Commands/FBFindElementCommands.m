@@ -69,11 +69,19 @@ static id<FBResponsePayload> FBNoSuchElementErrorResponseForRequest(FBRouteReque
 + (id<FBResponsePayload>)handleFindElements:(FBRouteRequest *)request
 {
   FBSession *session = request.session;
-  NSArray *elements = [self.class elementsUsing:request.arguments[@"using"]
-                                      withValue:request.arguments[@"value"]
-                                          under:session.activeApplication
-                    shouldReturnAfterFirstMatch:NO];
-  return FBResponseWithCachedElements(elements, request.session.elementCache, FBConfiguration.sharedInstance.shouldUseCompactResponses);
+  BOOL compact = FBConfiguration.sharedInstance.shouldUseCompactResponses;
+  NSArray *elements;
+  if (!compact && !FBConfiguration.sharedInstance.boundElementsByIndex
+      && [request.arguments[@"using"] isEqualToString:@"predicate string"]) {
+    elements = [session.activeApplication fb_descendantsMatchingPredicateForResponse:
+      [NSPredicate predicateWithFormat:request.arguments[@"value"]]];
+  } else {
+    elements = [self.class elementsUsing:request.arguments[@"using"]
+                              withValue:request.arguments[@"value"]
+                                  under:session.activeApplication
+            shouldReturnAfterFirstMatch:NO];
+  }
+  return FBResponseWithCachedElements(elements, request.session.elementCache, compact);
 }
 
 + (id<FBResponsePayload>)handleFindVisibleCells:(FBRouteRequest *)request

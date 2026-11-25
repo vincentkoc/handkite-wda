@@ -11,6 +11,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/** Seed one rich response only when its newly executed query covers every
+ returned AX-bound element with a unique snapshot. Never use a previous query. */
+FOUNDATION_EXPORT BOOL FBCacheSnapshotsFromLookup(
+  NSArray<XCUIElement *> *elements, XCUIElement *scope,
+  id<FBXCElementSnapshot> root);
+
 @interface XCUIElement (FBCaching)
 
 @property (nonatomic, readonly) NSString *fb_cacheId;

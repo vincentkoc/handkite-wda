@@ -16,6 +16,7 @@
 @interface ViewController ()
 @property (weak, nonatomic) IBOutlet UILabel *orentationLabel;
 @property (weak, nonatomic) IBOutlet UIButton *button;
+@property (strong, nonatomic) UITextField *querySnapshotTarget;
 @end
 
 @implementation ViewController
@@ -23,6 +24,26 @@
 - (void)viewDidLoad
 {
   [super viewDidLoad];
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--query-snapshot-fixture"]) {
+    self.view = [[UIView alloc] initWithFrame:self.view.frame];
+    self.view.backgroundColor = UIColor.whiteColor;
+    UITextField *target = [[UITextField alloc] initWithFrame:CGRectMake(20, 120, 180, 44)];
+    target.accessibilityIdentifier = @"snapshot-target";
+    target.accessibilityLabel = @"Before";
+    target.text = @"before";
+    target.borderStyle = UITextBorderStyleRoundedRect;
+    self.querySnapshotTarget = target;
+    [self.view addSubview:target];
+    UIButton *trigger = [UIButton buttonWithType:UIButtonTypeSystem];
+    trigger.frame = CGRectMake(20, 220, 180, 44);
+    trigger.accessibilityIdentifier = @"snapshot-update";
+    [trigger setTitle:@"Update" forState:UIControlStateNormal];
+    [trigger addTarget:self action:@selector(updateQuerySnapshotFixture:)
+      forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:trigger];
+    return;
+  }
 
 #if !TARGET_OS_TV
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--webview-fixture"]) {
@@ -63,6 +84,14 @@
   // killed outright. Sleeping instead simulates an app that stops answering
   // accessibility requests while staying alive, per #1210.
   [NSThread sleepForTimeInterval:20.0];
+}
+
+- (void)updateQuerySnapshotFixture:(id)sender
+{
+  self.querySnapshotTarget.accessibilityLabel = @"After";
+  self.querySnapshotTarget.text = @"after";
+  self.querySnapshotTarget.enabled = NO;
+  self.querySnapshotTarget.frame = CGRectOffset(self.querySnapshotTarget.frame, 20, 10);
 }
 
 - (IBAction)didTapButton:(UIButton *)button

@@ -101,18 +101,17 @@ static void FBAttachSnapshots(NSArray<XCUIElement *> *elements)
 
 id<FBResponsePayload> FBResponseWithCachedElements(NSArray<XCUIElement *> *elements, FBElementCache *elementCache, BOOL compact)
 {
-  if (!compact) {
-    FBAttachSnapshots(elements);
-  }
   NSMutableArray *elementsResponse = [NSMutableArray array];
   @try {
+    if (!compact) {
+      FBAttachSnapshots(elements);
+    }
     for (XCUIElement *element in elements) {
       [elementCache storeElement:maybeStable(element)];
       [elementsResponse addObject:FBDictionaryResponseWithElement(element, compact)];
       element.lastSnapshot = nil;
     }
   } @finally {
-    // Cached elements must not keep the attached snapshots if building a response throws
     for (XCUIElement *element in elements) {
       element.lastSnapshot = nil;
     }

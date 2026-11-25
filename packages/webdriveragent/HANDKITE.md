@@ -46,6 +46,12 @@ reordered, or sent upstream on its own.
 4. `fix(wda): scope custom bundle identifiers to the runner` adds the
    dedicated override above; the library bundle identifier stays unchanged.
 
+5. Rich application-root predicate responses can reuse the snapshot produced by
+   that same lookup when it covers every returned AX identity uniquely. Missing
+   or ambiguous coverage uses the original fresh-snapshot path. Compact,
+   first-match and link-text lookups retain their existing behavior. Response
+   cleanup clears all attached snapshots, including exceptions.
+
 ## Syncing with upstream
 
 ```sh

@@ -60,6 +60,11 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (NSArray<XCUIElement *> *)fb_descendantsMatchingPredicate:(NSPredicate *)predicate shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch;
 
+/** Direct rich /elements predicate response only. The caller must serialize or
+ clear every returned snapshot; never use this for first-object selection. */
+- (NSArray<XCUIElement *> *)fb_descendantsMatchingPredicateForResponse:(NSPredicate *)predicate;
+
+
 /**
  Returns an array of descendants with property matching given value
 

@@ -17,6 +17,10 @@
 #import "XCUIApplication.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBIsVisible.h"
+#import "XCUIElement+FBFind.h"
+#import "XCUIElement+FBCaching.h"
+#import "FBResponsePayload.h"
+#import "FBElementCache.h"
 
 @interface FBConfigurationTests : FBIntegrationTestCase
 
@@ -116,6 +120,90 @@
     XCTAssertTrue(text.exists);
   } @finally {
     FBConfiguration.sharedInstance.accessibilityDeadline = previousDeadline;
+    [self.testedApplication terminate];
+  }
+}
+
+- (void)testRichLookupUsesCurrentValuesWithStableIdentity
+{
+  FBConfiguration *configuration = FBConfiguration.sharedInstance;
+  BOOL compact = configuration.shouldUseCompactResponses;
+  BOOL boundByIndex = configuration.boundElementsByIndex;
+  NSString *attributes = configuration.elementResponseAttributes;
+  NSArray<XCUIElement *> *beforeElements = nil;
+  NSArray<XCUIElement *> *afterElements = nil;
+  @try {
+    configuration.shouldUseCompactResponses = NO;
+    configuration.boundElementsByIndex = NO;
+    configuration.elementResponseAttributes = @"type,label,rect,enabled,attribute/name,attribute/value";
+    self.testedApplication.launchArguments = @[@"--query-snapshot-fixture"];
+    [self.testedApplication launch];
+    XCTAssertTrue([self.testedApplication.buttons[@"snapshot-update"]
+      waitForExistenceWithTimeout:5]);
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:
+      @"type == 'XCUIElementTypeApplication' OR name == 'snapshot-target'"];
+    beforeElements = [self.testedApplication fb_descendantsMatchingPredicateForResponse:predicate];
+    XCTAssertEqual(beforeElements.count, 2u);
+    NSDictionary *before = nil;
+    for (XCUIElement *element in beforeElements) {
+      XCTAssertNotNil(element.lastSnapshot);
+      NSDictionary *row = FBDictionaryResponseWithElement(element, NO);
+      if ([row[@"attribute/name"] isEqual:@"snapshot-target"]) {
+        before = row;
+      }
+    }
+    FBResponseWithCachedElements(beforeElements, [FBElementCache new], NO);
+    for (XCUIElement *element in beforeElements) {
+      XCTAssertNil(element.lastSnapshot);
+    }
+    XCTAssertNotNil(before);
+    XCTAssertNotNil(before[@"ELEMENT"]);
+    XCTAssertEqualObjects(before[@"label"], @"Before");
+    XCTAssertEqualObjects(before[@"attribute/value"], @"before");
+    XCTAssertEqualObjects(before[@"enabled"], @YES);
+    [self.testedApplication.buttons[@"snapshot-update"] tap];
+    afterElements = [self.testedApplication fb_descendantsMatchingPredicateForResponse:predicate];
+    XCTAssertEqual(afterElements.count, 2u);
+    NSDictionary *after = nil;
+    for (XCUIElement *element in afterElements) {
+      XCTAssertNotNil(element.lastSnapshot);
+      NSDictionary *row = FBDictionaryResponseWithElement(element, NO);
+      if ([row[@"attribute/name"] isEqual:@"snapshot-target"]) {
+        after = row;
+      }
+    }
+    FBResponseWithCachedElements(afterElements, [FBElementCache new], NO);
+    for (XCUIElement *element in afterElements) {
+      XCTAssertNil(element.lastSnapshot);
+    }
+    XCTAssertNotNil(after);
+    XCTAssertNotNil(after[@"ELEMENT"]);
+    XCTAssertEqualObjects(before[@"ELEMENT"], after[@"ELEMENT"]);
+    XCTAssertEqualObjects(after[@"label"], @"After");
+    XCTAssertEqualObjects(after[@"attribute/value"], @"after");
+    XCTAssertEqualObjects(after[@"enabled"], @NO);
+    XCTAssertEqualWithAccuracy([after[@"rect"][@"x"] doubleValue],
+      [before[@"rect"][@"x"] doubleValue] + 20, 0.5);
+    XCTAssertEqualWithAccuracy([after[@"rect"][@"y"] doubleValue],
+      [before[@"rect"][@"y"] doubleValue] + 10, 0.5);
+    // Single link-text lookups use this property helper and discard all but
+    // their first result. They must not inherit response-only snapshot seeding.
+    NSArray<XCUIElement *> *links = [self.testedApplication
+      fb_descendantsMatchingProperty:@"name" value:@"snapshot-" partialSearch:YES];
+    XCTAssertGreaterThan(links.count, 1u);
+    for (XCUIElement *element in links) {
+      XCTAssertNil(element.lastSnapshot);
+    }
+    XCTAssertNil(self.testedApplication.lastSnapshot);
+  } @finally {
+    NSArray *allElements = [(beforeElements ?: @[])
+      arrayByAddingObjectsFromArray:(afterElements ?: @[])];
+    for (XCUIElement *element in allElements) {
+      element.lastSnapshot = nil;
+    }
+    configuration.shouldUseCompactResponses = compact;
+    configuration.boundElementsByIndex = boundByIndex;
+    configuration.elementResponseAttributes = attributes;
     [self.testedApplication terminate];
   }
 }
