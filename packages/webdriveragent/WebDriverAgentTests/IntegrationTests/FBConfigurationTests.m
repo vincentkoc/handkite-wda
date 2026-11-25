@@ -161,15 +161,22 @@
           NSString *uid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:node];
           id visible = node.additionalAttributes[FB_XCAXAIsVisibleAttribute];
           XCTAssertNotNil(uid);
-          XCTAssertNil(values[uid]);
           XCTAssertTrue([visible isKindOfClass:NSNumber.class]);
           XCTAssertTrue([visible isEqual:@YES] || [visible isEqual:@NO]);
-          values[uid] = visible;
+          if (nil == values[uid]) {
+            values[uid] = [NSMutableArray array];
+          }
+          [values[uid] addObject:visible];
         }
         XCTAssertGreaterThan(values.count, 8u);
+        for (NSMutableArray *aliases in values.allValues) {
+          [aliases sortUsingSelector:@selector(compare:)];
+        }
+        // Native aliases carry no additional authority. Preserve them here so
+        // neither missing nodes nor changed multiplicities can pass parity.
         [results addObject:values];
         NSLog(@"visibility_contract minimal=%u nodes=%lu ms=%.3f",
-          minimal ? 1U : 0U, (unsigned long)values.count,
+          minimal ? 1U : 0U, (unsigned long)nodes.count,
           (NSProcessInfo.processInfo.systemUptime - started) * 1000);
       }
       XCTAssertEqualObjects(results[0], results[1]);
