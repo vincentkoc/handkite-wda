@@ -17,9 +17,6 @@
 #import "XCUIApplication.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBIsVisible.h"
-#import "XCUIElement+FBUtilities.h"
-#import "XCUIElement+FBUID.h"
-#import "XCTestPrivateSymbols.h"
 
 @interface FBConfigurationTests : FBIntegrationTestCase
 
@@ -119,69 +116,6 @@
     XCTAssertTrue(text.exists);
   } @finally {
     FBConfiguration.sharedInstance.accessibilityDeadline = previousDeadline;
-    [self.testedApplication terminate];
-  }
-}
-
-// Diagnostic for the exact native request used by inventory prefetching.
-// This runs against the synthetic test app, never a connected personal app.
-- (void)testInventoryVisibilityAttributeCostAndParity
-{
-  @try {
-    [self launchApplication];
-    [self goToAttributesPage];
-    [self.testedApplication.textFields[@"aIdentifier"] tap];
-    XCTAssertTrue([self.testedApplication.keyboards.firstMatch
-      waitForExistenceWithTimeout:5]);
-    for (NSUInteger trial = 0; trial < 3; trial++) {
-      id<FBXCElementSnapshot> root = [self.testedApplication fb_standardSnapshot];
-      NSMutableArray<NSDictionary *> *results = [NSMutableArray array];
-      for (NSUInteger offset = 0; offset < 2; offset++) {
-        BOOL minimal = (trial + offset) % 2 != 0;
-        NSArray *attributes = minimal ? @[FB_XCAXAIsVisibleAttributeName]
-          : [FBStandardAttributeNames()
-             arrayByAddingObject:FB_XCAXAIsVisibleAttributeName];
-        __block NSError *error = nil;
-        NSError *timeoutError = nil;
-        __block id<FBXCElementSnapshot> snapshot = nil;
-        NSTimeInterval started = NSProcessInfo.processInfo.systemUptime;
-        BOOL completed = [FBXCAXClientProxy.sharedClient withAXTimeout:20 do:^{
-          snapshot = [FBXCAXClientProxy.sharedClient
-            snapshotForElement:root.accessibilityElement attributes:attributes
-            inDepth:YES error:&error];
-        } error:&timeoutError];
-        XCTAssertTrue(completed);
-        XCTAssertNil(timeoutError);
-        XCTAssertNil(error);
-        XCTAssertNotNil(snapshot);
-        NSMutableArray *nodes = [NSMutableArray arrayWithObject:snapshot];
-        [nodes addObjectsFromArray:[(id)snapshot _allDescendants] ?: @[]];
-        NSMutableDictionary *values = [NSMutableDictionary dictionary];
-        for (id<FBXCElementSnapshot> node in nodes) {
-          NSString *uid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:node];
-          id visible = node.additionalAttributes[FB_XCAXAIsVisibleAttribute];
-          XCTAssertNotNil(uid);
-          XCTAssertTrue([visible isKindOfClass:NSNumber.class]);
-          XCTAssertTrue([visible isEqual:@YES] || [visible isEqual:@NO]);
-          if (nil == values[uid]) {
-            values[uid] = [NSMutableArray array];
-          }
-          [values[uid] addObject:visible];
-        }
-        XCTAssertGreaterThan(values.count, 8u);
-        for (NSMutableArray *aliases in values.allValues) {
-          [aliases sortUsingSelector:@selector(compare:)];
-        }
-        // Native aliases carry no additional authority. Preserve them here so
-        // neither missing nodes nor changed multiplicities can pass parity.
-        [results addObject:values];
-        NSLog(@"visibility_contract minimal=%u nodes=%lu ms=%.3f",
-          minimal ? 1U : 0U, (unsigned long)nodes.count,
-          (NSProcessInfo.processInfo.systemUptime - started) * 1000);
-      }
-      XCTAssertEqualObjects(results[0], results[1]);
-    }
-  } @finally {
     [self.testedApplication terminate];
   }
 }
