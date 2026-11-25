@@ -14,6 +14,7 @@
 #import "FBMathUtils.h"
 #import "FBConfiguration.h"
 #import "FBMacros.h"
+#import "FBLogger.h"
 #import "FBProtocolHelpers.h"
 #import "XCUIElementQuery.h"
 #import "XCUIElement+FBCaching.h"
@@ -149,7 +150,16 @@ id<FBResponsePayload> FBResponseWithCachedElements(NSArray<XCUIElement *> *eleme
           [snapshots addObject:element.lastSnapshot];
         }
       }
-      FBWithPrefetchedVisibility(snapshots, FBVisibilitySnapshot(root), serialize);
+      NSTimeInterval started = NSDate.timeIntervalSinceReferenceDate;
+      NSArray *visibility = FBVisibilitySnapshot(root);
+      NSTimeInterval prefetched = NSDate.timeIntervalSinceReferenceDate;
+      NSUInteger used = FBWithPrefetchedVisibility(snapshots, visibility, serialize);
+      if ([NSProcessInfo.processInfo.environment[@"HANDKITE_TIMINGS"]
+           isEqualToString:@"1"]) {
+        [FBLogger logFmt:@"visibility_prefetch candidates=%lu used=%lu ms=%.3f",
+          (unsigned long)snapshots.count, (unsigned long)used,
+          (prefetched - started) * 1000];
+      }
     } else {
       serialize();
     }

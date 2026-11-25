@@ -24,6 +24,13 @@ NSNumber* _Nullable fetchSnapshotVisibility(id<FBXCElementSnapshot> snapshot)
 
 static char FBPrefetchedVisibilityKey;
 
+@interface FBPrefetchedVisibilityValue : NSObject
+@property (nonatomic, strong) NSNumber *value;
+@property (nonatomic) BOOL used;
+@end
+@implementation FBPrefetchedVisibilityValue
+@end
+
 static NSDictionary<NSString *, id<FBXCElementSnapshot>> *FBUniqueSnapshots(
   NSArray<id<FBXCElementSnapshot>> *snapshots)
 {
@@ -44,7 +51,7 @@ static NSDictionary<NSString *, id<FBXCElementSnapshot>> *FBUniqueSnapshots(
   return result;
 }
 
-void FBWithPrefetchedVisibility(NSArray<id<FBXCElementSnapshot>> *snapshots,
+NSUInteger FBWithPrefetchedVisibility(NSArray<id<FBXCElementSnapshot>> *snapshots,
                                NSArray<id<FBXCElementSnapshot>> *visibilitySnapshots,
                                void (^body)(void))
 {
@@ -62,10 +69,19 @@ void FBWithPrefetchedVisibility(NSArray<id<FBXCElementSnapshot>> *snapshots,
       }
       id raw = [FBXCElementSnapshotWrapper ensureWrapped:target].snapshot;
       [scoped addObject:raw];
-      objc_setAssociatedObject(raw, &FBPrefetchedVisibilityKey, visible,
+      FBPrefetchedVisibilityValue *entry = [FBPrefetchedVisibilityValue new];
+      entry.value = visible;
+      objc_setAssociatedObject(raw, &FBPrefetchedVisibilityKey, entry,
                                OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     body();
+    NSUInteger used = 0;
+    for (id snapshot in scoped) {
+      FBPrefetchedVisibilityValue *entry = objc_getAssociatedObject(
+        snapshot, &FBPrefetchedVisibilityKey);
+      used += entry.used ? 1 : 0;
+    }
+    return used;
   } @finally {
     for (id snapshot in scoped) {
       objc_setAssociatedObject(snapshot, &FBPrefetchedVisibilityKey, nil,
@@ -113,8 +129,10 @@ void FBWithPrefetchedVisibility(NSArray<id<FBXCElementSnapshot>> *snapshots,
   }
 
   NSError *error = nil;
-  NSNumber *attributeValue = objc_getAssociatedObject(self.snapshot,
-                                                      &FBPrefetchedVisibilityKey);
+  FBPrefetchedVisibilityValue *prefetched = objc_getAssociatedObject(
+    self.snapshot, &FBPrefetchedVisibilityKey);
+  NSNumber *attributeValue = prefetched.value;
+  prefetched.used = nil != attributeValue;
   if (nil == attributeValue) {
     attributeValue = [self fb_attributeValue:FB_XCAXAIsVisibleAttributeName
                                        error:&error];

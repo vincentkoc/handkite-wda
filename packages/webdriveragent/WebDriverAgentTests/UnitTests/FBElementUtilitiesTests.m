@@ -139,11 +139,12 @@
 {
   FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:@NO];
   FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
-  FBWithPrefetchedVisibility(@[(id)target],
+  NSUInteger used = FBWithPrefetchedVisibility(@[(id)target],
     @[(id)[self visibilitySnapshot:1 value:@YES]], ^{
       XCTAssertFalse(wrapper.fb_isVisible);
       XCTAssertEqual(wrapper.reads, 0u);
     });
+  XCTAssertEqual(used, 0u);
 }
 
 - (void)testPrefetchedVisibilityPreservesVisibleDescendantShortcut
@@ -151,11 +152,12 @@
   FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
   target.descendants = @[[self visibilitySnapshot:2 value:@YES]];
   FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
-  FBWithPrefetchedVisibility(@[(id)target],
+  NSUInteger used = FBWithPrefetchedVisibility(@[(id)target],
     @[(id)[self visibilitySnapshot:1 value:@NO]], ^{
       XCTAssertTrue(wrapper.fb_isVisible);
       XCTAssertEqual(wrapper.reads, 0u);
     });
+  XCTAssertEqual(used, 0u);
 }
 
 - (void)testPrefetchedVisibilitySuppliesBothNativeBooleanValues
@@ -163,11 +165,12 @@
   for (NSNumber *visible in @[@YES, @NO]) {
     FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
     FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
-    FBWithPrefetchedVisibility(@[(id)target],
+    NSUInteger used = FBWithPrefetchedVisibility(@[(id)target],
       @[(id)[self visibilitySnapshot:1 value:visible]], ^{
         XCTAssertEqual(wrapper.fb_isVisible, visible.boolValue);
         XCTAssertEqual(wrapper.reads, 0u);
       });
+    XCTAssertEqual(used, 1u);
     XCTAssertEqualObjects(target.additionalAttributes[FB_XCAXAIsVisibleAttribute], visible);
   }
 }
@@ -183,10 +186,11 @@
   ]) {
     FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
     FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
-    FBWithPrefetchedVisibility(@[(id)target], source, ^{
+    NSUInteger used = FBWithPrefetchedVisibility(@[(id)target], source, ^{
       XCTAssertFalse(wrapper.fb_isVisible);
       XCTAssertEqual(wrapper.reads, 1u);
     });
+    XCTAssertEqual(used, 0u);
   }
 }
 
