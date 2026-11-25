@@ -46,13 +46,6 @@ reordered, or sent upstream on its own.
 4. `fix(wda): scope custom bundle identifiers to the runner` adds the
    dedicated override above; the library bundle identifier stays unchanged.
 
-5. `perf(wda): prefetch native visibility for rich inventories` requests native
-   visibility once per rich multi-element response. Unique matching snapshot IDs
-   supply values only at the existing getter's direct-fetch step; cached values,
-   descendant checks and per-element fallback retain precedence. Prefetched
-   values are cleared after serialization, including exceptions. No depth,
-   timeout or cross-request cache setting is changed.
-
 ## Syncing with upstream
 
 ```sh

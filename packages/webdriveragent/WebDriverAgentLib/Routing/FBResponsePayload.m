@@ -14,7 +14,6 @@
 #import "FBMathUtils.h"
 #import "FBConfiguration.h"
 #import "FBMacros.h"
-#import "FBLogger.h"
 #import "FBProtocolHelpers.h"
 #import "XCUIElementQuery.h"
 #import "XCUIElement+FBCaching.h"
@@ -22,9 +21,6 @@
 #import "XCUIElement+FBUID.h"
 #import "XCUIElement+FBUtilities.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
-#import "XCUIElement+FBIsVisible.h"
-#import "FBXCAXClientProxy.h"
-#import "XCTestPrivateSymbols.h"
 
 NSString *arbitraryAttrPrefix = @"attribute/";
 
@@ -67,7 +63,7 @@ id<FBResponsePayload> FBResponseWithCachedElement(XCUIElement *element, FBElemen
 }
 
 // Resolves snapshots of all the given elements with a single app snapshot instead of one per element
-static id<FBXCElementSnapshot> FBAttachSnapshots(NSArray<XCUIElement *> *elements)
+static void FBAttachSnapshots(NSArray<XCUIElement *> *elements)
 {
   NSMutableDictionary<NSString *, NSMutableArray<XCUIElement *> *> *pending = [NSMutableDictionary dictionary];
   for (XCUIElement *element in elements) {
@@ -85,7 +81,7 @@ static id<FBXCElementSnapshot> FBAttachSnapshots(NSArray<XCUIElement *> *element
     }
   }
   if (0 == pending.count) {
-    return nil;
+    return;
   }
   @autoreleasepool {
     XCUIApplication *application = elements.firstObject.application;
@@ -100,71 +96,23 @@ static id<FBXCElementSnapshot> FBAttachSnapshots(NSArray<XCUIElement *> *element
         element.lastSnapshot = snapshot;
       }
     }
-    return root;
   }
 }
 
-static NSArray<id<FBXCElementSnapshot>> *FBVisibilitySnapshot(
-  id<FBXCElementSnapshot> root)
+id<FBResponsePayload> FBResponseWithCachedElements(NSArray<XCUIElement *> *elements, FBElementCache *elementCache, BOOL compact)
 {
-  @try {
-    NSError *error = nil;
-    NSArray *attributes = [FBStandardAttributeNames()
-      arrayByAddingObject:FB_XCAXAIsVisibleAttributeName];
-    id<FBXCElementSnapshot> snapshot = [FBXCAXClientProxy.sharedClient
-      snapshotForElement:root.accessibilityElement attributes:attributes
-      inDepth:YES error:&error];
-    if (nil == snapshot || nil != error) {
-      return @[];
-    }
-    NSMutableArray *result = [NSMutableArray arrayWithObject:snapshot];
-    [result addObjectsFromArray:[(id)snapshot _allDescendants] ?: @[]];
-    return result.count <= 8192 ? result : @[];
-  } @catch (NSException *exception) {
-    // A failed optional read uses the existing per-element getter; never retry.
-    return @[];
+  if (!compact) {
+    FBAttachSnapshots(elements);
   }
-}
-
-id<FBResponsePayload> FBResponseWithCachedElements(NSArray<XCUIElement *> *elements,
-                                                 FBElementCache *elementCache,
-                                                 BOOL compact)
-{
   NSMutableArray *elementsResponse = [NSMutableArray array];
   @try {
-    id<FBXCElementSnapshot> root = compact ? nil : FBAttachSnapshots(elements);
-    void (^serialize)(void) = ^{
-      for (XCUIElement *element in elements) {
-        [elementCache storeElement:maybeStable(element)];
-        [elementsResponse addObject:FBDictionaryResponseWithElement(element, compact)];
-        element.lastSnapshot = nil;
-      }
-    };
-    NSArray *fields = [FBConfiguration.sharedInstance.elementResponseAttributes
-      componentsSeparatedByString:@","];
-    if (!compact && elements.count > 1 && nil != root
-        && [fields containsObject:@"displayed"]) {
-      NSMutableArray *snapshots = [NSMutableArray array];
-      for (XCUIElement *element in elements) {
-        if (nil != element.lastSnapshot) {
-          [snapshots addObject:element.lastSnapshot];
-        }
-      }
-      NSTimeInterval started = NSDate.timeIntervalSinceReferenceDate;
-      NSArray *visibility = FBVisibilitySnapshot(root);
-      NSTimeInterval prefetched = NSDate.timeIntervalSinceReferenceDate;
-      NSUInteger used = FBWithPrefetchedVisibility(snapshots, visibility, serialize);
-      if ([NSProcessInfo.processInfo.environment[@"HANDKITE_TIMINGS"]
-           isEqualToString:@"1"]) {
-        [FBLogger logFmt:@"visibility_prefetch candidates=%lu used=%lu ms=%.3f",
-          (unsigned long)snapshots.count, (unsigned long)used,
-          (prefetched - started) * 1000];
-      }
-    } else {
-      serialize();
+    for (XCUIElement *element in elements) {
+      [elementCache storeElement:maybeStable(element)];
+      [elementsResponse addObject:FBDictionaryResponseWithElement(element, compact)];
+      element.lastSnapshot = nil;
     }
   } @finally {
-    // Both ordinary and prefetched snapshots are request-scoped, including errors.
+    // Cached elements must not keep the attached snapshots if building a response throws
     for (XCUIElement *element in elements) {
       element.lastSnapshot = nil;
     }
