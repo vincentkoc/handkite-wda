@@ -14,6 +14,10 @@
 #import "FBElementUtils.h"
 #import "FBConfiguration.h"
 #import "XCUIElement+FBUtilities.h"
+#import "XCUIElement+FBIsVisible.h"
+#import "FBXCElementSnapshotWrapper+Helpers.h"
+#import "XCElementSnapshotDouble.h"
+#import "XCTestPrivateSymbols.h"
 #import <objc/runtime.h>
 
 @interface FBQuiescenceApplicationDouble : NSObject
@@ -27,6 +31,43 @@
 {
   self.observedTimeout = FBConfiguration.sharedInstance.waitForIdleTimeout;
   @throw [NSException exceptionWithName:@"QuiescenceFailure" reason:@"test" userInfo:nil];
+}
+@end
+
+@interface FBVisibilityAXDouble : NSObject
+@property (nonatomic, strong) NSDictionary *payload;
+@property (nonatomic) int processIdentifier;
+@end
+@implementation FBVisibilityAXDouble
+- (id)valueForKey:(NSString *)key
+{
+  return [key isEqualToString:@"_elementID"]
+    ? self.payload[@"uid.elementID"] : [super valueForKey:key];
+}
+@end
+
+@interface FBVisibilitySnapshotDouble : XCElementSnapshotDouble
+@property (nonatomic, strong) FBVisibilityAXDouble *ax;
+@property (nonatomic, strong) NSArray *descendants;
+@end
+@implementation FBVisibilitySnapshotDouble
+- (id)accessibilityElement { return self.ax; }
+- (NSArray *)_allDescendants { return self.descendants ?: @[]; }
+@end
+
+@interface FBXCElementSnapshotWrapper (VisibilityTestInit)
+- (instancetype)initWithSnapshot:(id<FBXCElementSnapshot>)snapshot;
+@end
+
+@interface FBVisibilityWrapperDouble : FBXCElementSnapshotWrapper
+@property (nonatomic, strong) NSNumber *nativeResult;
+@property (nonatomic) NSUInteger reads;
+@end
+@implementation FBVisibilityWrapperDouble
+- (id)fb_attributeValue:(NSString *)attribute error:(NSError **)error
+{
+  self.reads++;
+  return self.nativeResult;
 }
 @end
 
@@ -71,6 +112,126 @@
   
   NSSet *result = [FBElementUtils uniqueElementTypesWithElements:elements];
   XCTAssertEqual([result count], 2);
+}
+
+- (FBVisibilitySnapshotDouble *)visibilitySnapshot:(NSUInteger)uid
+                                          value:(id)value
+{
+  FBVisibilitySnapshotDouble *snapshot = [FBVisibilitySnapshotDouble new];
+  snapshot.ax = [FBVisibilityAXDouble new];
+  snapshot.ax.payload = @{@"uid.elementID": @(uid)};
+  snapshot.ax.processIdentifier = 42;
+  if (nil != value) {
+    snapshot.additionalAttributes[FB_XCAXAIsVisibleAttribute] = value;
+  }
+  return snapshot;
+}
+
+- (FBVisibilityWrapperDouble *)visibilityWrapper:(FBVisibilitySnapshotDouble *)snapshot
+{
+  FBVisibilityWrapperDouble *wrapper = [[FBVisibilityWrapperDouble alloc]
+    initWithSnapshot:(id)snapshot];
+  wrapper.nativeResult = @NO;
+  return wrapper;
+}
+
+- (void)testPrefetchedVisibilityPreservesCachedFalse
+{
+  FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:@NO];
+  FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
+  FBWithPrefetchedVisibility(@[(id)target],
+    @[(id)[self visibilitySnapshot:1 value:@YES]], ^{
+      XCTAssertFalse(wrapper.fb_isVisible);
+      XCTAssertEqual(wrapper.reads, 0u);
+    });
+}
+
+- (void)testPrefetchedVisibilityPreservesVisibleDescendantShortcut
+{
+  FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
+  target.descendants = @[[self visibilitySnapshot:2 value:@YES]];
+  FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
+  FBWithPrefetchedVisibility(@[(id)target],
+    @[(id)[self visibilitySnapshot:1 value:@NO]], ^{
+      XCTAssertTrue(wrapper.fb_isVisible);
+      XCTAssertEqual(wrapper.reads, 0u);
+    });
+}
+
+- (void)testPrefetchedVisibilitySuppliesBothNativeBooleanValues
+{
+  for (NSNumber *visible in @[@YES, @NO]) {
+    FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
+    FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
+    FBWithPrefetchedVisibility(@[(id)target],
+      @[(id)[self visibilitySnapshot:1 value:visible]], ^{
+        XCTAssertEqual(wrapper.fb_isVisible, visible.boolValue);
+        XCTAssertEqual(wrapper.reads, 0u);
+      });
+    XCTAssertEqualObjects(target.additionalAttributes[FB_XCAXAIsVisibleAttribute], visible);
+  }
+}
+
+- (void)testMissingAmbiguousOrMalformedVisibilityUsesNativeGetter
+{
+  for (NSArray *source in @[
+    @[],
+    @[[self visibilitySnapshot:2 value:@YES]],
+    @[[self visibilitySnapshot:1 value:@YES], [self visibilitySnapshot:1 value:@NO]],
+    @[[self visibilitySnapshot:1 value:nil]],
+    @[[self visibilitySnapshot:1 value:@"invalid"]]
+  ]) {
+    FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
+    FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
+    FBWithPrefetchedVisibility(@[(id)target], source, ^{
+      XCTAssertFalse(wrapper.fb_isVisible);
+      XCTAssertEqual(wrapper.reads, 1u);
+    });
+  }
+}
+
+- (void)testAmbiguousTargetIdsDoNotReceivePrefetchedVisibility
+{
+  FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
+  FBVisibilitySnapshotDouble *other = [self visibilitySnapshot:1 value:nil];
+  FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
+  FBWithPrefetchedVisibility(@[(id)target, (id)other],
+    @[(id)[self visibilitySnapshot:1 value:@YES]], ^{
+      XCTAssertFalse(wrapper.fb_isVisible);
+      XCTAssertEqual(wrapper.reads, 1u);
+    });
+}
+
+- (void)testVisibilityPrefetchDoesNotSurviveExceptionOrNextRequest
+{
+  for (NSNumber *throws in @[@NO, @YES]) {
+    FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
+    FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
+    @try {
+      FBWithPrefetchedVisibility(@[(id)target],
+        @[(id)[self visibilitySnapshot:1 value:@YES]], ^{
+          if (throws.boolValue) {
+            @throw [NSException exceptionWithName:@"fixture" reason:nil userInfo:nil];
+          }
+        });
+    } @catch (NSException *exception) {
+      XCTAssertEqualObjects(exception.name, @"fixture");
+    }
+    XCTAssertFalse(wrapper.fb_isVisible);
+    XCTAssertEqual(wrapper.reads, 1u);
+  }
+}
+
+- (void)testVisibilityPrefetchIncludesOtherProcessDescendants
+{
+  FBVisibilitySnapshotDouble *target = [self visibilitySnapshot:1 value:nil];
+  FBVisibilitySnapshotDouble *source = [self visibilitySnapshot:1 value:@YES];
+  target.ax.processIdentifier = source.ax.processIdentifier = 77;
+  FBVisibilityWrapperDouble *wrapper = [self visibilityWrapper:target];
+  FBWithPrefetchedVisibility(@[(id)target], @[(id)source], ^{
+    XCTAssertTrue(wrapper.fb_isVisible);
+    XCTAssertEqual(wrapper.reads, 0u);
+  });
 }
 
 @end

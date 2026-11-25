@@ -10,6 +10,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/** Supply one request's native visibility values without changing the getter's
+ cached-value or visible-descendant precedence. Always clears them after body. */
+FOUNDATION_EXPORT void FBWithPrefetchedVisibility(
+  NSArray<id<FBXCElementSnapshot>> *snapshots,
+  NSArray<id<FBXCElementSnapshot>> *visibilitySnapshots,
+  void (^body)(void));
+
 @interface XCUIElement (FBIsVisible)
 
 /*! Whether or not the element is visible */
