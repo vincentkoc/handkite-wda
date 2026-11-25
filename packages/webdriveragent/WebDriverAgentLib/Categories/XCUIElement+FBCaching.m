@@ -43,6 +43,9 @@ BOOL FBCacheSnapshotsFromLookup(NSArray<XCUIElement *> *elements,
     if (nil == uid || [ambiguous containsObject:uid]) {
       continue;
     }
+    if (byUid[uid] == snapshot) {
+      continue;
+    }
     if (nil != byUid[uid]) {
       [byUid removeObjectForKey:uid];
       [ambiguous addObject:uid];

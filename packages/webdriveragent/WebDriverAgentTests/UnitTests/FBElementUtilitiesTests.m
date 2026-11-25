@@ -144,6 +144,19 @@
   XCTAssertEqual(first.lastSnapshot, a);
 }
 
+- (void)testLookupSnapshotAcceptsRepeatedReferenceToTheSameObject
+{
+  FBLookupSnapshotDouble *root = [self lookupSnapshot:1];
+  FBLookupSnapshotDouble *child = [self lookupSnapshot:2];
+  root.descendants = @[child, child];
+  FBLookupElementDouble *scope = [FBLookupElementDouble new];
+  FBLookupElementDouble *element = [self lookupElement:child];
+  XCTAssertTrue(FBCacheSnapshotsFromLookup((id)@[scope, element],
+    (id)scope, (id)root));
+  XCTAssertEqual(element.lastSnapshot, child);
+  XCTAssertEqual(scope.lastSnapshot, root);
+}
+
 - (void)testLookupSnapshotRefusesPartialOrAmbiguousCoverageAtomically
 {
   for (NSUInteger scenario = 0; scenario < 4; scenario++) {
