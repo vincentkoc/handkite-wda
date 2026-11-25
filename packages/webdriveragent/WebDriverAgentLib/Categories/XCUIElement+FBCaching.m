@@ -17,12 +17,22 @@
 #import "XCUIElement+FBUID.h"
 #import "FBElementUtils.h"
 
+static BOOL FBLookupSnapshotResult(BOOL reused, NSUInteger total, NSUInteger reason)
+{
+  if ([NSProcessInfo.processInfo.environment[@"HANDKITE_TIMINGS"] isEqualToString:@"1"]) {
+    NSLog(@"lookup_snapshot total=%lu reused=%lu reason=%lu",
+      (unsigned long)total, (unsigned long)(reused ? total : 0),
+      (unsigned long)reason);
+  }
+  return reused;
+}
+
 BOOL FBCacheSnapshotsFromLookup(NSArray<XCUIElement *> *elements,
                                 XCUIElement *scope,
                                 id<FBXCElementSnapshot> root)
 {
   if (nil == root || elements.count == 0) {
-    return NO;
+    return FBLookupSnapshotResult(NO, elements.count, 1);
   }
   NSMutableArray *snapshots = [NSMutableArray arrayWithObject:root];
   [snapshots addObjectsFromArray:[(id)root _allDescendants] ?: @[]];
@@ -46,9 +56,16 @@ BOOL FBCacheSnapshotsFromLookup(NSArray<XCUIElement *> *elements,
     id ax = element == scope ? root.accessibilityElement
       : element.fb_boundAccessibilityElement;
     NSString *uid = nil == ax ? nil : [FBElementUtils uidWithAccessibilityElement:ax];
-    id snapshot = nil == uid ? nil : byUid[uid];
-    if (nil == snapshot || [seen containsObject:uid]) {
-      return NO;
+    if (nil == uid) {
+      return FBLookupSnapshotResult(NO, elements.count, 2);
+    }
+    id snapshot = byUid[uid];
+    if (nil == snapshot) {
+      return FBLookupSnapshotResult(NO, elements.count,
+        [ambiguous containsObject:uid] ? 4 : 3);
+    }
+    if ([seen containsObject:uid]) {
+      return FBLookupSnapshotResult(NO, elements.count, 5);
     }
     [seen addObject:uid];
     [bindings addObject:snapshot];
@@ -63,7 +80,7 @@ BOOL FBCacheSnapshotsFromLookup(NSArray<XCUIElement *> *elements,
     }
     @throw exception;
   }
-  return YES;
+  return FBLookupSnapshotResult(YES, elements.count, 0);
 }
 
 @implementation XCUIElement (FBCaching)
