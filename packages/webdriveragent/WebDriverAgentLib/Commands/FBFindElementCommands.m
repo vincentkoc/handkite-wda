@@ -118,8 +118,9 @@ static id<FBResponsePayload> FBNoSuchElementErrorResponseForRequest(FBRouteReque
   };
   @try {
     XCUIApplication *app = request.session.activeApplication;
-    NSString *bundle = app.identifier;
-    pid_t pid = app.processID;
+    NSDictionary *applicationContext = FBScopedApplicationContext((id)app);
+    NSString *bundle = applicationContext[@"bundle"];
+    pid_t pid = [applicationContext[@"pid"] intValue];
     id selection = FBConfiguration.sharedInstance.currentDisplayId ?: NSNull.null;
     NSNumber *display = selection == NSNull.null ? @([FBScreen displayID]) : selection;
     if (pid <= 0 || ![bundle isEqual:arguments[@"app"]] || ![selection isEqual:expectedDisplay]
@@ -204,7 +205,7 @@ static id<FBResponsePayload> FBNoSuchElementErrorResponseForRequest(FBRouteReque
       NSNumber *locked = [[XCUIDevice sharedDevice] fb_observedScreenLockState];
       id selected = FBConfiguration.sharedInstance.currentDisplayId ?: NSNull.null;
       NSNumber *effectiveDisplay = selected == NSNull.null ? @([FBScreen displayID]) : selected;
-      if (foreground.processID != pid || ![foreground.identifier isEqual:bundle]
+      if (!FBScopedApplicationMatches((id)foreground, applicationContext)
           || locked == nil || locked.boolValue || ![selected isEqual:expectedDisplay]
           || ![effectiveDisplay isEqual:display]) { return nil; }
       return @{@"active":active ?: NSNull.null,@"recipient":recipientFacts,@"locked":@NO,
@@ -212,7 +213,7 @@ static id<FBResponsePayload> FBNoSuchElementErrorResponseForRequest(FBRouteReque
     }, ^NSArray *{
       checkTime();
       XCUIApplication *foreground = request.session.activeApplication;
-      if (foreground.processID != pid || ![foreground.identifier isEqual:bundle]) { return nil; }
+      if (!FBScopedApplicationMatches((id)foreground, applicationContext)) { return nil; }
       id<FBXCElementSnapshot> last = [foreground fb_standardSnapshot];
       if (last.accessibilityElement.processIdentifier != pid) { return nil; }
       NSArray *ids = FBScopedUIDs(FBScopedMembers(last,predicate));

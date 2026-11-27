@@ -73,6 +73,15 @@ second membership request. An input caller must still retain its original
 freshness/deadline checks and normal dispatch guards; this endpoint sends no
 input. Refusals contain fixed reasons, never source text or element labels.
 
+Application identity uses the native `bundleID` and positive process ID at the
+initial and both terminal reads. XCTest's `identifier` is a display or
+accessibility name and must never substitute for a bundle ID. The earlier
+candidate compared it with the host's bundle ID, which could refuse before the
+first membership snapshot. Foundation fixtures exercise the same production
+identity helper with a display-identifier getter that throws, replacement
+bundles and changed PIDs. This fixes the source contract; it does not recover
+the unsaved native error from the previous live refusal or qualify latency.
+
 This is an unqualified candidate. The local offline check is:
 
 ```sh

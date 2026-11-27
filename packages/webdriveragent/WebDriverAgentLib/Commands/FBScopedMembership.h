@@ -1,6 +1,28 @@
 // Copyright (c) 2026 Vincent Koc. BSD-3-Clause; see LICENSE.
 #import <Foundation/Foundation.h>
 
+@protocol FBScopedApplicationIdentity <NSObject>
+@property (nonatomic, readonly, copy) NSString *bundleID;
+@property (nonatomic, readonly) pid_t processID;
+@end
+
+// XCTest's identifier is a display/accessibility name, not bundle authority.
+// Share the actual producer read with host-only fixtures; never fall back to it.
+static NSDictionary *FBScopedApplicationContext(id<FBScopedApplicationIdentity> app)
+{
+  NSString *bundle = [app.bundleID copy];
+  pid_t pid = app.processID;
+  if (bundle.length == 0 || pid <= 0) { return nil; }
+  return @{@"bundle":bundle, @"pid":@(pid)};
+}
+
+static BOOL FBScopedApplicationMatches(id<FBScopedApplicationIdentity> app,
+  NSDictionary *expected)
+{
+  NSDictionary *current = FBScopedApplicationContext(app);
+  return current != nil && expected != nil && [current isEqual:expected];
+}
+
 // Foundation-only so the exact production traversal can be tested without
 // starting XCTest, a simulator, a service, or a physical device.
 static NSArray *FBCollectScopedMembers(id root, NSUInteger maxDepth,

@@ -1,6 +1,57 @@
 // Copyright (c) 2026 Vincent Koc. BSD-3-Clause; see LICENSE.
 #import "../WebDriverAgentLib/Commands/FBScopedMembership.h"
 
+@interface ScopedApplicationFixture : NSObject <FBScopedApplicationIdentity>
+@property (nonatomic, copy) NSString *bundleID;
+@property (nonatomic) pid_t processID;
+@end
+@implementation ScopedApplicationFixture
+- (NSString *)identifier
+{
+  @throw [NSException exceptionWithName:@"DisplayIdentifierRead"
+    reason:@"a display name is not bundle identity" userInfo:nil];
+}
+@end
+
+static void applicationIdentityChecks(void)
+{
+  ScopedApplicationFixture *app = [ScopedApplicationFixture new];
+  app.bundleID = @"com.example.browser";
+  app.processID = 42;
+  NSDictionary *context = FBScopedApplicationContext(app);
+  NSCAssert([context[@"bundle"] isEqual:app.bundleID], @"read the bundle ID");
+  NSCAssert(FBScopedApplicationMatches(app,context), @"same app and PID");
+  app.bundleID = @"com.example.replacement";
+  NSCAssert(!FBScopedApplicationMatches(app,context), @"same name cannot replace app");
+  app.bundleID = @"com.example.browser";
+  app.processID = 43;
+  NSCAssert(!FBScopedApplicationMatches(app,context), @"same app, changed PID");
+  app.processID = 0;
+  NSCAssert(FBScopedApplicationContext(app) == nil, @"positive PID required");
+  app.processID = 42;
+  app.bundleID = @"";
+  NSCAssert(FBScopedApplicationContext(app) == nil, @"no display-name fallback");
+  app.bundleID = @"com.example.browser";
+  for (NSNumber *phase in @[@0,@1,@2]) {
+    BOOL refused = NO;
+    @try {
+      NSDictionary *proof = FBFinishScopedCapture(@[@"member"], ^id{
+        return @"frame";
+      }, ^NSDictionary *{
+        if (phase.intValue == 1) { app.processID = 43; }
+        return FBScopedApplicationMatches(app,context) ? @{} : nil;
+      }, ^NSArray *{
+        if (phase.intValue == 2) { app.bundleID = @"com.example.replacement"; }
+        return FBScopedApplicationMatches(app,context) ? @[@"member"] : nil;
+      });
+      NSCAssert(proof != nil, @"matching terminal identity");
+    } @catch (NSException *exception) { refused = YES; }
+    NSCAssert(refused == (phase.intValue != 0), @"both terminal reads are guarded");
+    app.bundleID = @"com.example.browser";
+    app.processID = 42;
+  }
+}
+
 static NSArray *collect(NSDictionary *root, NSUInteger depth, NSUInteger children, NSUInteger limit)
 {
   return FBCollectScopedMembers(root, depth, children, limit,
@@ -18,6 +69,7 @@ static BOOL refuses(NSDictionary *root, NSUInteger depth, NSUInteger children, N
 int main(void)
 {
   @autoreleasepool {
+    applicationIdentityChecks();
     NSDictionary *leaf = @{@"uid":@"leaf",@"match":@YES};
     NSDictionary *root = @{@"uid":@"root",@"children":@[leaf]};
     NSCAssert([collect(root, 50, 1000, 128) isEqual:@[leaf]], @"complete unfiltered match");
@@ -56,7 +108,7 @@ int main(void)
         ^NSArray *{ return nil; });
     } @catch (NSException *exception) { unknownRefused = YES; }
     NSCAssert(unknownRefused, @"unknown terminal result is not empty membership");
-    puts("scoped membership: 12 Foundation checks passed");
+    puts("scoped membership: 12 traversal and 9 application checks passed");
   }
   return 0;
 }
