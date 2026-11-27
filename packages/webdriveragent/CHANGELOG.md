@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## Handkite candidate (unreleased)
+
+* **scoped snapshot:** bind application context to the native bundle ID and PID,
+  rather than the XCTest display identifier, at all three identity reads.
+
 ## [17.0.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.5...appium-webdriveragent@17.0.6) (2026-11-14)
 
 ### Miscellaneous Chores
