@@ -46,6 +46,43 @@ reordered, or sent upstream on its own.
 4. `fix(wda): scope custom bundle identifiers to the runner` adds the
    dedicated override above; the library bundle identifier stays unchanged.
 
+## Scoped membership producer (candidate)
+
+`GET /session/:sessionId/appium/settings` advertises
+`handkiteScopedSnapshotVersion: 1`. The read-only
+`POST /session/:sessionId/wda/scopedSnapshot` route accepts a matching session,
+app, display selection, predicate, 128-member limit, correlation nonce and
+remaining deadline (at most 5 seconds). A caller may also require a particular
+native recipient to remain hittable and focused. The nonce only correlates a
+response; it is not a UI generation or authority renewal.
+
+The normal WDA route queue serializes the request with input and settings
+handlers. It does not freeze the application. The producer therefore uses two
+fresh native snapshots: the first supplies complete cheap XML, unfiltered
+predicate membership and bounded rich rows; the second re-enumerates the same
+unfiltered native UID population after the screenshot and final recipient,
+app/PID, lock and display checks. A changed, duplicate, incomplete or oversized
+population refuses. Snapshot depth/child limits and unknown native visibility
+also refuse. Both selected and effective display identities must agree.
+
+Direct accessibility bindings and cache IDs are primed before the terminal
+traversal. No snapshot or live attribute read follows it. The response includes
+the source, rows, frame and both complete matching UID sets. No global response
+profile is changed, so there is no settings-restoration interval or host-side
+second membership request. An input caller must still retain its original
+freshness/deadline checks and normal dispatch guards; this endpoint sends no
+input. Refusals contain fixed reasons, never source text or element labels.
+
+This is an unqualified candidate. The local offline check is:
+
+```sh
+python3 packages/webdriveragent/Scripts/check-scoped-snapshot.py
+```
+
+It syntax-checks both modified Objective-C commands against the installed
+simulator SDK and runs the actual Foundation-only traversal/terminal-order
+helpers. It does not build a full runner, start XCTest or prove device latency.
+
 ## Syncing with upstream
 
 ```sh

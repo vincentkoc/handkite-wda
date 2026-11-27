@@ -238,7 +238,9 @@
 
 + (id<FBResponsePayload>)handleGetSettings:(FBRouteRequest *)request
 {
-  return FBResponseWithObject([FBSettingsHandler currentSettingsForSession:request.session]);
+  NSMutableDictionary *settings = [[FBSettingsHandler currentSettingsForSession:request.session] mutableCopy];
+  settings[@"handkiteScopedSnapshotVersion"] = @1;
+  return FBResponseWithObject(settings);
 }
 
 + (id<FBResponsePayload>)handleSetSettings:(FBRouteRequest *)request
